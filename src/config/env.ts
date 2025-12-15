@@ -56,7 +56,7 @@ const envSchema = z.object({
   CONTACERTA_LOGIN_URL: z.string().url().optional(), // Opcional - usa o mesmo login da Transfeera se não informado
   
   // Panda Video API Configuration
-  PANDAS_APIKEY: z.string().nonempty("PANDAS_APIKEY is required"), // API key do Panda Video para gerenciamento de vídeos
+  PANDAS_APIKEY: z.string().optional(), // API key do Panda Video para gerenciamento de vídeos (opcional - apenas necessário se usar vídeos)
   
   // AWS / Storage Configuration
   AWS_REGION: z.string().default("us-east-1"),
