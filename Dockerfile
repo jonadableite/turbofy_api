@@ -42,6 +42,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/docker/healthcheck.js ./healthcheck.js
+COPY --from=builder /app/docker/wait-for-db.js ./wait-for-db.js
 
 EXPOSE 3030
 
@@ -49,5 +50,6 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=30s \
   CMD ["node", "/app/healthcheck.js"]
 
 # Rodar migrations e subir servidor
-# O prisma migrate deploy usa o prisma.config.ts para obter a DATABASE_URL
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+# Aguardar banco estar disponível, depois rodar migrations e iniciar servidor
+# Se o migrate deploy falhar, ainda tenta iniciar o servidor (migrations podem já estar aplicadas)
+CMD ["sh", "-c", "node wait-for-db.js && (npx prisma migrate deploy || echo '⚠️ Migrate deploy falhou, continuando...') && node dist/index.js"]
