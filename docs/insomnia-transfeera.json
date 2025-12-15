@@ -1,0 +1,116 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2025-12-04T12:00:00.000Z",
+  "__export_source": "turbofy-transfeera",
+  "resources": [
+    {
+      "_id": "env_turbofy_base",
+      "_type": "environment",
+      "parentId": "wrk_turbofy",
+      "name": "Base Environment",
+      "data": {
+        "baseUrl": "http://localhost:3000",
+        "authToken": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmODVjYTM4NC00NGUzLTRhYjgtODA3ZC0zYWEwYzc3Njk3M2YiLCJyb2xlcyI6WyJBRE1JTiJdLCJpYXQiOjE3NjQ4ODYxMzgsImV4cCI6MTc2NDg4NzAzOH0.U_7-WyGGpo5rrfsA6mL--LZbUIakC4hzFYLBSVsNgo",
+        "idempotency": "test-{{ timestamp }}",
+        "merchantId": "MERCHANT_ID",
+        "bankAccountId": "BANK_ACCOUNT_ID",
+        "settlementId": "SETTLEMENT_ID",
+        "chargeId": "CHARGE_ID",
+        "webhookSecret": "TRANSFEERA_WEBHOOK_SECRET"
+      }
+    },
+    {
+      "_id": "wrk_turbofy",
+      "_type": "workspace",
+      "parentId": null,
+      "name": "Turbofy - Transfeera"
+    },
+    {
+      "_id": "fld_charges",
+      "_type": "request_group",
+      "parentId": "wrk_turbofy",
+      "name": "Charges"
+    },
+    {
+      "_id": "req_create_charge_pix",
+      "_type": "request",
+      "parentId": "fld_charges",
+      "name": "POST /charges (PIX)",
+      "method": "POST",
+      "url": "{{ baseUrl }}/charges",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"merchantId\": \"{{ merchantId }}\",\n  \"amountCents\": 1000,\n  \"currency\": \"BRL\",\n  \"description\": \"Teste Pix\",\n  \"method\": \"PIX\",\n  \"externalRef\": \"settlement-demo\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "X-Idempotency-Key", "value": "{{ idempotency }}" },
+        { "name": "Authorization", "value": "{{ authToken }}" }
+      ]
+    },
+    {
+      "_id": "fld_settlements",
+      "_type": "request_group",
+      "parentId": "wrk_turbofy",
+      "name": "Settlements (Payout)"
+    },
+    {
+      "_id": "req_create_settlement",
+      "_type": "request",
+      "parentId": "fld_settlements",
+      "name": "POST /settlements",
+      "method": "POST",
+      "url": "{{ baseUrl }}/settlements",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"merchantId\": \"{{ merchantId }}\",\n  \"amountCents\": 1000,\n  \"currency\": \"BRL\",\n  \"bankAccountId\": \"{{ bankAccountId }}\"\n}"
+      },
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "Authorization", "value": "{{ authToken }}" }
+      ]
+    },
+    {
+      "_id": "req_process_settlement",
+      "_type": "request",
+      "parentId": "fld_settlements",
+      "name": "POST /settlements/:id/process",
+      "method": "POST",
+      "url": "{{ baseUrl }}/settlements/{{ settlementId }}/process",
+      "headers": [{ "name": "Authorization", "value": "{{ authToken }}" }]
+    },
+    {
+      "_id": "fld_webhooks",
+      "_type": "request_group",
+      "parentId": "wrk_turbofy",
+      "name": "Webhooks (simulação)"
+    },
+    {
+      "_id": "req_webhook_transfer_finalizado",
+      "_type": "request",
+      "parentId": "fld_webhooks",
+      "name": "POST /webhooks/transfeera (Transfer FINALIZADO)",
+      "method": "POST",
+      "url": "{{ baseUrl }}/webhooks/transfeera",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"id\": \"evt-transfer-1\",\n  \"version\": \"v1\",\n  \"object\": \"Transfer\",\n  \"account_id\": \"sandbox\",\n  \"date\": \"{{ timestamp }}\",\n  \"data\": {\n    \"id\": \"transfer-123\",\n    \"status\": \"FINALIZADO\",\n    \"integration_id\": \"{{ settlementId }}\",\n    \"batch_id\": \"batch-xyz\"\n  }\n}"
+      },
+      "headers": [{ "name": "Content-Type", "value": "application/json" }]
+    },
+    {
+      "_id": "req_webhook_cashin_paid",
+      "_type": "request",
+      "parentId": "fld_webhooks",
+      "name": "POST /webhooks/transfeera (CashIn pago)",
+      "method": "POST",
+      "url": "{{ baseUrl }}/webhooks/transfeera",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"id\": \"evt-cashin-1\",\n  \"version\": \"v1\",\n  \"object\": \"CashIn\",\n  \"account_id\": \"sandbox\",\n  \"date\": \"{{ timestamp }}\",\n  \"data\": {\n    \"id\": \"cashin-1\",\n    \"value\": 10,\n    \"end2end_id\": \"E2E123\",\n    \"txid\": \"{{ chargeId }}\",\n    \"integration_id\": \"settlement-demo\",\n    \"pix_key\": \"pix@example.com\",\n    \"payer\": {\"name\": \"Teste\", \"document\": \"00000000000\", \"account_type\": \"CONTA_CORRENTE\", \"account\": \"0000\", \"account_digit\": \"0\", \"agency\": \"0000\", \"bank\": {\"name\": \"Banco\", \"code\": \"001\", \"ispb\": \"00000000\"}},\n    \"receiver\": {\"name\": \"Merchant\", \"document\": \"00000000000\"}\n  }\n}"
+      },
+      "headers": [{ "name": "Content-Type", "value": "application/json" }]
+    }
+  ]
+}

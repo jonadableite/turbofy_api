@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Testing
+coverage/
+.nyc_output/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Prisma
+# Note: schema.prisma should be committed, but generated client should not
+
+# Uploads and temporary files
+uploads/
+tmp/
+temp/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Misc
+.cache/
+.turbo/

@@ -1,0 +1,27 @@
+<html>
+  <body style="font-family: Arial, sans-serif; background-color: #0f0f10; color: #ffffff;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 540px; margin: 0 auto; background-color: #1a1a1d; padding: 32px; border-radius: 16px;">
+      <tr>
+        <td>
+          <h1 style="color: #F97316;">Olá {{name}}</h1>
+          <p style="line-height: 1.6;">
+            Fizemos a análise dos documentos enviados e, por enquanto, não conseguimos aprovar seu cadastro.
+          </p>
+          {{#if reason}}
+            <p style="line-height: 1.6;">
+              Motivo: {{reason}}
+            </p>
+          {{/if}}
+          <p style="line-height: 1.6;">
+            Você pode reenviar os documentos corrigidos diretamente pelo painel. Assim que recebermos, faremos uma nova análise com prioridade.
+          </p>
+          <p style="line-height: 1.6;">
+            Qualquer dúvida, é só responder este e-mail.
+          </p>
+          <p style="margin-top: 32px; color: #9ca3af;">Equipe Turbofy</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+

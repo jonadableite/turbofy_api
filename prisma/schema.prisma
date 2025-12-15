@@ -1,0 +1,1142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// ---------------------------------------
+/// Multi-Tenancy: Tenant Model
+/// ---------------------------------------
+/// Estratégia: Schema-per-tenant para isolamento completo
+/// Cada tenant tem seu próprio schema no PostgreSQL
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  schema    String   @unique // Nome do schema no PostgreSQL (ex: tenant_abc123)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  merchants Merchant[]
+  users     User[]
+
+  @@index([schema])
+  @@map("tenants")
+}
+
+/// ---------------------------------------
+/// Merchant Type Enum (Painéis Turbofy)
+/// ---------------------------------------
+/// Um User pode ter múltiplos perfis:
+/// - COMPRADOR: Todo usuário (painel de compras)
+/// - PRODUCER: Merchant que vende cursos (painel vendedor)
+/// - RIFEIRO: Merchant que organiza rifas (painel rifeiro)
+/// 
+/// Frontend: Switcher permite alternar entre painéis ativos
+/// (semelhante ao modelo Hotmart: Comprador <-> Vendedor)
+
+enum MerchantType {
+  PRODUCER // Produtores de cursos/infoprodutos (Painel Vendedor)
+  RIFEIRO // Organizadores de rifas (Painel Rifeiro)
+}
+
+model Merchant {
+  id                  String                @id @default(uuid())
+  name                String
+  email               String                @unique
+  document            String                @unique
+  type                MerchantType          @default(PRODUCER)
+  tenantId            String? // Opcional até multi-tenancy estar implementado
+  tenant              Tenant?               @relation(fields: [tenantId], references: [id])
+  feePercentage       Decimal               @default(3.5) // 3.5% producer, 2.5% rifeiro (MENORES DO MERCADO!)
+  active              Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  payments            Payment[]
+  pixKeys             PixKey[]
+  charges             Charge[]
+  chargeSplits        ChargeSplit[]
+  settlements         Settlement[]
+  reconciliations     Reconciliation[]
+  balance             Decimal               @default(0)
+  fee                 Decimal               @default(0)
+  bankAccount         BankAccount?
+  checkoutConfig      CheckoutConfig?
+  checkoutSessions    CheckoutSession[]
+  users               User[]
+  providerCredentials ProviderCredentials[]
+  paymentInteractions PaymentInteraction[]
+  courses             Course[]
+  domainConfig        DomainConfig?
+  wallet              Wallet?
+  affiliates          Affiliate[]
+  commissionRules     CommissionRule[]
+  raffles             Raffle[]
+  profile             MerchantProfile?
+  documents           MerchantDocument[]
+  apiKeys             ApiKey[]
+  webhooks            Webhook[]
+
+  @@index([tenantId])
+}
+
+model User {
+  id                  String               @id @default(uuid())
+  email               String               @unique
+  passwordHash        String
+  roles               String[]
+  document            String               @unique // CPF ou CNPJ
+  phone               String? // Telefone para SMS/WhatsApp MFA futuro
+  tenantId            String?
+  tenant              Tenant?              @relation(fields: [tenantId], references: [id])
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  otps                UserOtp[]
+  tokens              UserToken[]
+  passwordResetTokens PasswordResetToken[]
+  merchantId          String?
+  merchant            Merchant?            @relation(fields: [merchantId], references: [id])
+  paymentInteractions PaymentInteraction[]
+  enrollments         Enrollment[]
+  affiliations        Affiliation[]
+  coProducers         CoProducer[]
+
+  @@index([tenantId])
+}
+
+model UserOtp {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model UserToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  tokenHash  String    @unique
+  revokedAt  DateTime?
+  replacedBy String?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+model AuthAttempt {
+  id          String    @id @default(uuid())
+  email       String
+  ip          String
+  count       Int       @default(0)
+  windowStart DateTime  @default(now())
+  lockedUntil DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([email, ip])
+}
+
+model Payment {
+  id               String      @id @default(uuid())
+  amount           Decimal
+  description      String
+  merchantId       String
+  merchant         Merchant    @relation(fields: [merchantId], references: [id])
+  status           String
+  method           String
+  customerEmail    String
+  customerName     String
+  customerDocument String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  expiresAt        DateTime?
+  metadata         Json?
+  transactionId    String?
+  splitRules       SplitRule[]
+}
+
+model PixKey {
+  id          String   @id @default(uuid())
+  merchantId  String
+  merchant    Merchant @relation(fields: [merchantId], references: [id])
+  type        String
+  key         String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isActive    Boolean  @default(true)
+}
+
+model BankAccount {
+  id            String   @id @default(uuid())
+  merchantId    String   @unique
+  merchant      Merchant @relation(fields: [merchantId], references: [id])
+  bankName      String
+  bankCode      String
+  accountType   String
+  accountNumber String
+  accountDigit  String
+  branchNumber  String
+  branchDigit   String?
+  document      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model SplitRule {
+  id         String   @id @default(uuid())
+  paymentId  String
+  payment    Payment  @relation(fields: [paymentId], references: [id])
+  merchantId String
+  amount     Decimal
+  percentage Decimal?
+  createdAt  DateTime @default(now())
+}
+
+/// ---------------------------------------
+/// Charge models (nova geração de cobranças)
+/// ---------------------------------------
+
+enum ChargeStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELED
+}
+
+model Charge {
+  id             String               @id @default(uuid())
+  merchantId     String
+  merchant       Merchant             @relation(fields: [merchantId], references: [id])
+  affiliateId    String?
+  affiliate      Affiliation?         @relation(fields: [affiliateId], references: [id])
+  amountCents    Int
+  currency       String               @default("BRL")
+  description    String?
+  status         ChargeStatus         @default(PENDING)
+  method         String? // PIX ou BOLETO
+  expiresAt      DateTime?
+  idempotencyKey String               @unique
+  externalRef    String?              @unique
+  metadata       Json?
+  pixQrCode      String? // dados base64 do QR Code
+  pixCopyPaste   String? // payload do código de copia e cola
+  boletoUrl      String? // URL/linha digitável do boleto
+  pixTxid        String?              @unique @db.VarChar(36)
+  paidAt         DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  splits         ChargeSplit[]
+  fees           Fee[]
+  sessions       CheckoutSession[]
+  interactions   PaymentInteraction[]
+  enrollment     Enrollment?
+
+  @@index([merchantId])
+  @@index([affiliateId])
+}
+
+model ChargeSplit {
+  id          String   @id @default(uuid())
+  chargeId    String
+  charge      Charge   @relation(fields: [chargeId], references: [id])
+  merchantId  String
+  merchant    Merchant @relation(fields: [merchantId], references: [id])
+  amountCents Int
+  percentage  Decimal?
+  createdAt   DateTime @default(now())
+
+  @@index([chargeId])
+  @@index([merchantId])
+}
+
+model Fee {
+  id          String   @id @default(uuid())
+  chargeId    String
+  charge      Charge   @relation(fields: [chargeId], references: [id])
+  type        String
+  amountCents Int
+  createdAt   DateTime @default(now())
+
+  @@index([chargeId])
+}
+
+/// ---------------------------------------
+/// Settlement models (repasses)
+/// ---------------------------------------
+
+enum SettlementStatus {
+  PENDING
+  SCHEDULED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+model Settlement {
+  id            String           @id @default(uuid())
+  merchantId    String
+  merchant      Merchant         @relation(fields: [merchantId], references: [id])
+  affiliateId   String? // Se for settlement para afiliado
+  affiliate     Affiliate?       @relation(fields: [affiliateId], references: [id])
+  amountCents   Int
+  currency      String           @default("BRL")
+  status        SettlementStatus @default(PENDING)
+  scheduledFor  DateTime?
+  processedAt   DateTime?
+  bankAccountId String?
+  transactionId String?
+  failureReason String?
+  metadata      Json?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([merchantId])
+  @@index([affiliateId])
+  @@index([status])
+  @@index([scheduledFor])
+}
+
+/// ---------------------------------------
+/// Reconciliation models (conciliação)
+/// ---------------------------------------
+
+enum ReconciliationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum ReconciliationType {
+  AUTOMATIC
+  MANUAL
+}
+
+model Reconciliation {
+  id                    String               @id @default(uuid())
+  merchantId            String
+  merchant              Merchant             @relation(fields: [merchantId], references: [id])
+  type                  ReconciliationType
+  status                ReconciliationStatus @default(PENDING)
+  startDate             DateTime
+  endDate               DateTime
+  matches               Json? // Array de ReconciliationMatch
+  unmatchedCharges      String[]             @default([]) // Array de charge IDs
+  unmatchedTransactions String[]             @default([]) // Array de transaction IDs
+  totalAmountCents      Int                  @default(0)
+  matchedAmountCents    Int                  @default(0)
+  failureReason         String?
+  processedAt           DateTime?
+  metadata              Json?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([merchantId])
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+/// ---------------------------------------
+/// Webhook attempts (registro de retentativas)
+/// ---------------------------------------
+
+model WebhookAttempt {
+  id             String   @id @default(uuid())
+  provider       String
+  type           String
+  eventId        String
+  status         String
+  attempt        Int
+  signatureValid Boolean
+  errorMessage   String?
+  payload        Json
+  createdAt      DateTime @default(now())
+
+  @@index([provider, type, status])
+  @@index([eventId])
+  @@index([createdAt])
+}
+
+/// ---------------------------------------
+/// Checkout models (white-label)
+/// ---------------------------------------
+
+enum CheckoutSessionStatus {
+  CREATED
+  OPENED
+  COMPLETED
+  EXPIRED
+}
+
+model CheckoutConfig {
+  id          String   @id @default(uuid())
+  merchantId  String   @unique
+  merchant    Merchant @relation(fields: [merchantId], references: [id])
+  logoUrl     String?
+  themeTokens Json?
+  animations  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CheckoutSession {
+  id            String                @id @default(uuid())
+  chargeId      String
+  charge        Charge                @relation(fields: [chargeId], references: [id])
+  merchantId    String
+  merchant      Merchant              @relation(fields: [merchantId], references: [id])
+  status        CheckoutSessionStatus @default(CREATED)
+  returnUrl     String?
+  cancelUrl     String?
+  themeSnapshot Json?
+  expiresAt     DateTime?
+  createdAt     DateTime              @default(now())
+  interactions  PaymentInteraction[]
+
+  @@index([merchantId])
+  @@index([chargeId])
+}
+
+model ProviderCredentials {
+  id             String    @id @default(uuid())
+  merchantId     String
+  merchant       Merchant  @relation(fields: [merchantId], references: [id])
+  provider       String
+  clientId       String
+  clientSecret   String
+  accessToken    String?
+  tokenExpiresAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([merchantId, provider])
+  @@index([merchantId])
+}
+
+enum PaymentInteractionType {
+  CHARGE_CREATED
+  PIX_ISSUED
+  BOLETO_ISSUED
+  CHARGE_PAID
+  CHARGE_EXPIRED
+  CHECKOUT_SESSION_CREATED
+  ENROLLMENT_CREATED
+}
+
+model PaymentInteraction {
+  id          String                 @id @default(uuid())
+  merchantId  String
+  merchant    Merchant               @relation(fields: [merchantId], references: [id])
+  userId      String?
+  user        User?                  @relation(fields: [userId], references: [id])
+  chargeId    String?
+  charge      Charge?                @relation(fields: [chargeId], references: [id])
+  sessionId   String?
+  session     CheckoutSession?       @relation(fields: [sessionId], references: [id])
+  type        PaymentInteractionType
+  method      String?
+  provider    String?
+  amountCents Int?
+  metadata    Json?
+  createdAt   DateTime               @default(now())
+
+  @@index([merchantId, type, createdAt])
+  @@index([chargeId])
+}
+
+/// ---------------------------------------
+/// Education Platform models (Turbofy Academy)
+/// ---------------------------------------
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AccessType {
+  LIFETIME
+  SUBSCRIPTION
+}
+
+enum VideoProvider {
+  PANDA
+  BUNNY
+  VIMEO
+  YOUTUBE
+}
+
+enum PriceType {
+  ONE_TIME
+  SUBSCRIPTION
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  REFUNDED
+  REVOKED
+}
+
+model Course {
+  id                         String            @id @default(uuid())
+  merchantId                 String
+  merchant                   Merchant          @relation(fields: [merchantId], references: [id])
+  title                      String
+  description                String?           @db.Text
+  thumbnailUrl               String?
+  status                     CourseStatus      @default(DRAFT)
+  accessType                 AccessType        @default(LIFETIME)
+  certificateText            String?           @db.Text
+  marketplaceVisible         Boolean           @default(false)
+  affiliateProgramEnabled    Boolean           @default(false)
+  affiliateCommissionPercent Int               @default(0)
+  affiliateInviteToken       String?           @unique
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+  modules                    Module[]
+  prices                     CoursePrice[]
+  coupons                    Coupon[]
+  enrollments                Enrollment[]
+  salesPages                 SalesPage[]
+  affiliations               Affiliation[]
+  coProducers                CoProducer[]
+  checkouts                  ProductCheckout[]
+
+  @@index([merchantId])
+  @@index([status])
+}
+
+/// ---------------------------------------
+/// Product Checkout models (Builder Visual)
+/// ---------------------------------------
+
+enum UpsellType {
+  UPSELL
+  DOWNSELL
+}
+
+enum UpsellTrigger {
+  PAYMENT_SUCCESS
+  UPSELL_REJECTED
+  DOWNSELL_REJECTED
+}
+
+model ProductCheckout {
+  id            String   @id @default(uuid())
+  courseId      String
+  course        Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  name          String // "Checkout Principal", "Checkout Black Friday"
+  slug          String   @unique // URL amigavel: /c/meu-curso-checkout-a
+  isDefault     Boolean  @default(false)
+  published     Boolean  @default(false)
+  builderConfig Json     @default("{}") // Configuracao do builder (componentes, layout)
+  themeConfig   Json? // Cores, fontes, radius (override do merchant)
+  settings      Json? // exit_popup, countdown, notificacoes, testimonials
+  visits        Int      @default(0)
+  conversions   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orderBumps OrderBump[]
+  upsells    UpsellOffer[]
+
+  @@index([courseId])
+  @@index([slug])
+  @@index([courseId, isDefault])
+}
+
+model OrderBump {
+  id          String          @id @default(uuid())
+  checkoutId  String
+  checkout    ProductCheckout @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  courseId    String // Produto oferecido como bump
+  headline    String // "Adicione o Modulo Avancado!"
+  description String?         @db.Text
+  amountCents Int // Preco do bump
+  position    Int             @default(0)
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([checkoutId])
+  @@index([checkoutId, active])
+}
+
+model UpsellOffer {
+  id           String          @id @default(uuid())
+  checkoutId   String
+  checkout     ProductCheckout @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  type         UpsellType // UPSELL ou DOWNSELL
+  courseId     String // Produto oferecido
+  headline     String
+  description  String?         @db.Text
+  videoUrl     String? // Video de vendas do upsell
+  amountCents  Int
+  triggerAfter UpsellTrigger // Quando mostrar o upsell
+  position     Int             @default(0)
+  active       Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([checkoutId])
+  @@index([checkoutId, type])
+  @@index([checkoutId, active])
+}
+
+enum AffiliationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Affiliation {
+  id                String            @id @default(uuid())
+  courseId          String
+  course            Course            @relation(fields: [courseId], references: [id])
+  userId            String
+  user              User              @relation(fields: [userId], references: [id])
+  status            AffiliationStatus @default(PENDING)
+  commissionPercent Int
+  salesCount        Int               @default(0)
+  referralCode      String            @unique
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  charges           Charge[]
+
+  @@unique([courseId, userId])
+  @@index([userId, status])
+  @@index([courseId, status])
+}
+
+model CoProducer {
+  id                String   @id @default(uuid())
+  courseId          String
+  course            Course   @relation(fields: [courseId], references: [id])
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  commissionPercent Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([courseId, userId])
+  @@index([courseId])
+  @@index([userId])
+}
+
+model Module {
+  id        String   @id @default(uuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title     String
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lessons   Lesson[]
+
+  @@index([courseId])
+  @@index([courseId, position])
+}
+
+model Lesson {
+  id                String           @id @default(uuid())
+  moduleId          String
+  module            Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title             String
+  videoProvider     VideoProvider?
+  videoKey          String? // Bunny video ID, Vimeo ID, ou YouTube ID
+  contentHtml       String?          @db.Text
+  downloadableFiles Json? // Array de {name: string, url: string}
+  position          Int
+  isPublished       Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  progress          LessonProgress[]
+
+  @@index([moduleId])
+  @@index([moduleId, position])
+}
+
+model CoursePrice {
+  id                 String    @id @default(uuid())
+  courseId           String
+  course             Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  type               PriceType @default(ONE_TIME)
+  amountCents        Int
+  currency           String    @default("BRL")
+  recurrenceInterval String? // monthly, yearly, etc (para subscriptions)
+  active             Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([courseId])
+  @@index([courseId, active])
+}
+
+model Coupon {
+  id             String    @id @default(uuid())
+  courseId       String
+  course         Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  code           String
+  description    String?   @db.VarChar(500) // Descrição do cupom
+  percentage     Int? // 0-100
+  amountCents    Int? // desconto fixo em centavos
+  maxRedemptions Int?
+  redemptions    Int       @default(0)
+  expiresAt      DateTime?
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([courseId, code])
+  @@index([courseId])
+  @@index([code, active])
+}
+
+model Enrollment {
+  id           String           @id @default(uuid())
+  courseId     String
+  course       Course           @relation(fields: [courseId], references: [id])
+  userId       String
+  user         User             @relation(fields: [userId], references: [id])
+  chargeId     String           @unique
+  charge       Charge           @relation(fields: [chargeId], references: [id])
+  status       EnrollmentStatus @default(ACTIVE)
+  accessDate   DateTime         @default(now())
+  revokedAt    DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  progress     LessonProgress[]
+  certificates Certificate[]
+
+  @@unique([userId, courseId, chargeId])
+  @@index([courseId])
+  @@index([userId])
+  @@index([chargeId])
+}
+
+model LessonProgress {
+  id              String     @id @default(uuid())
+  enrollmentId    String
+  enrollment      Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lessonId        String
+  lesson          Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  progressPercent Int        @default(0)
+  completedAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([enrollmentId, lessonId])
+  @@index([enrollmentId])
+  @@index([lessonId])
+}
+
+model Certificate {
+  id             String     @id @default(uuid())
+  enrollmentId   String
+  enrollment     Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  issuedAt       DateTime   @default(now())
+  verificationQr String? // QR code ou hash de verificação
+  pdfUrl         String?
+  createdAt      DateTime   @default(now())
+
+  @@index([enrollmentId])
+}
+
+model SalesPage {
+  id          String   @id @default(uuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  slug        String   @unique
+  builderJson Json // Schema de blocks (headline, VSL, benefícios, etc)
+  published   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([courseId])
+  @@index([slug])
+}
+
+model DomainConfig {
+  id             String   @id @default(uuid())
+  merchantId     String   @unique
+  merchant       Merchant @relation(fields: [merchantId], references: [id])
+  schoolName     String
+  logoUrl        String?
+  primaryColor   String   @default("#8B5CF6")
+  customDomain   String?  @unique
+  bannerUrl      String? // Banner da área de membros
+  faviconUrl     String? // Favicon personalizado
+  secondaryColor String? // Cor secundária
+  accentColor    String? // Cor de destaque
+  fontFamily     String? // Fonte personalizada
+  theme          String?  @default("dark") // "dark" ou "light"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([merchantId])
+  @@index([customDomain])
+}
+
+/// ---------------------------------------
+/// Affiliate System models
+/// ---------------------------------------
+
+model Affiliate {
+  id              String           @id @default(uuid())
+  merchantId      String
+  merchant        Merchant         @relation(fields: [merchantId], references: [id])
+  name            String
+  email           String
+  document        String? // CPF/CNPJ
+  phone           String?
+  commissionRate  Decimal          @default(0) // Percentual de comissão (0-100)
+  active          Boolean          @default(true)
+  locked          Boolean          @default(false) // Se true, não pode editar nem excluir (após confirmação)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  links           AffiliateLink[]
+  commissionRules CommissionRule[]
+  settlements     Settlement[]
+
+  @@index([merchantId])
+  @@index([merchantId, active])
+  @@index([email])
+}
+
+model AffiliateLink {
+  id          String    @id @default(uuid())
+  affiliateId String
+  affiliate   Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  productId   String // courseId ou outro produto
+  code        String    @unique // Código único do link de afiliado
+  url         String    @db.Text
+  clicks      Int       @default(0)
+  conversions Int       @default(0)
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([affiliateId])
+  @@index([productId])
+  @@index([code])
+  @@index([affiliateId, productId])
+}
+
+model CommissionRule {
+  id             String     @id @default(uuid())
+  merchantId     String
+  merchant       Merchant   @relation(fields: [merchantId], references: [id])
+  affiliateId    String?
+  affiliate      Affiliate? @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  productId      String? // courseId ou null para regra global
+  type           String // "PERCENTAGE" ou "FIXED"
+  value          Decimal // Percentual (0-100) ou valor fixo em centavos
+  minAmountCents Int? // Valor mínimo para aplicar a regra
+  maxAmountCents Int? // Valor máximo para aplicar a regra
+  priority       Int        @default(0) // Maior prioridade = aplicado primeiro
+  active         Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([merchantId])
+  @@index([merchantId, active])
+  @@index([affiliateId])
+  @@index([productId])
+  @@index([merchantId, priority])
+}
+
+/// ---------------------------------------
+/// Wallet & Financial System models
+/// ---------------------------------------
+
+model Wallet {
+  id                    String              @id @default(uuid())
+  merchantId            String              @unique
+  merchant              Merchant            @relation(fields: [merchantId], references: [id])
+  availableBalanceCents Int                 @default(0) // Saldo disponível para saque
+  pendingBalanceCents   Int                 @default(0) // Saldo pendente (aguardando liquidação)
+  totalEarnedCents      Int                 @default(0) // Total já ganho (histórico)
+  currency              String              @default("BRL")
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  transactions          WalletTransaction[]
+
+  @@index([merchantId])
+}
+
+enum WalletTransactionType {
+  CREDIT // Crédito (recebimento)
+  DEBIT // Débito (saque, taxa)
+  SETTLEMENT // Liquidação
+  REFUND // Estorno
+  FEE // Taxa
+}
+
+enum WalletTransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model WalletTransaction {
+  id          String                  @id @default(uuid())
+  walletId    String
+  wallet      Wallet                  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type        WalletTransactionType
+  amountCents Int
+  status      WalletTransactionStatus @default(PENDING)
+  description String?
+  referenceId String? // ID da charge, settlement, etc
+  metadata    Json?
+  processedAt DateTime?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([walletId])
+  @@index([walletId, type])
+  @@index([walletId, status])
+  @@index([referenceId])
+  @@index([createdAt])
+}
+
+/// ---------------------------------------
+/// Raffle System models (Rifeiros)
+/// ---------------------------------------
+
+enum RaffleStatus {
+  DRAFT // Rascunho (em criação)
+  ACTIVE // Ativa (vendendo bilhetes)
+  SOLD_OUT // Esgotada (todos os bilhetes vendidos)
+  DRAWN // Sorteada (sorteio realizado)
+  CANCELLED // Cancelada
+}
+
+enum TicketStatus {
+  RESERVED // Reservado (aguardando pagamento)
+  PAID // Pago (bilhete confirmado)
+  CANCELLED // Cancelado (pagamento falhou ou rifa cancelada)
+}
+
+model Raffle {
+  id                 String         @id @default(uuid())
+  merchantId         String
+  merchant           Merchant       @relation(fields: [merchantId], references: [id])
+  title              String
+  description        String?        @db.Text
+  prizeDescription   String         @db.Text // Descrição do prêmio
+  thumbnailUrl       String? // Imagem da rifa/prêmio
+  ticketPriceCents   Int // Preço de cada bilhete em centavos
+  totalTickets       Int // Quantidade total de bilhetes
+  soldTickets        Int            @default(0) // Quantidade de bilhetes vendidos
+  status             RaffleStatus   @default(DRAFT)
+  drawDate           DateTime? // Data prevista do sorteio
+  drawnAt            DateTime? // Data/hora do sorteio realizado
+  winnerTicketNumber Int? // Número do bilhete vencedor
+  winnerName         String? // Nome do vencedor
+  winnerEmail        String? // Email do vencedor
+  winnerPhone        String? // Telefone do vencedor
+  metadata           Json? // Metadata adicional (regulamento, etc)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  tickets            RaffleTicket[]
+
+  @@index([merchantId])
+  @@index([merchantId, status])
+  @@index([status])
+  @@index([drawDate])
+}
+
+model RaffleTicket {
+  id            String       @id @default(uuid())
+  raffleId      String
+  raffle        Raffle       @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  ticketNumber  Int // Número do bilhete (1 a totalTickets)
+  buyerName     String
+  buyerEmail    String
+  buyerPhone    String?
+  buyerDocument String? // CPF do comprador (opcional, mas recomendado)
+  chargeId      String       @unique // Charge associada ao pagamento
+  status        TicketStatus @default(RESERVED)
+  reservedAt    DateTime     @default(now())
+  paidAt        DateTime? // Data/hora do pagamento confirmado
+  cancelledAt   DateTime?
+  metadata      Json? // Metadata adicional
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([raffleId, ticketNumber]) // Garante que o número seja único por rifa
+  @@index([raffleId])
+  @@index([raffleId, status])
+  @@index([chargeId])
+  @@index([buyerEmail])
+}
+
+/// ---------------------------------------
+/// Onboarding models
+/// ---------------------------------------
+
+model MerchantProfile {
+  id         String   @id @default(uuid())
+  merchantId String   @unique
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+
+  // Personal/Business Data
+  fullName  String?
+  document  String?   @unique // CPF/CNPJ
+  phone     String?
+  birthDate DateTime?
+
+  // Business Stats
+  revenueLast12Months String?
+  projectedRevenue    String?
+
+  // Address
+  zipCode      String?
+  street       String?
+  number       String?
+  complement   String?
+  neighborhood String?
+  city         String?
+  state        String?
+  country      String? @default("Brasil")
+
+  // Status
+  onboardingStep Int     @default(0) // 0: Not started, 1: Personal, 2: Address, 3: Docs, 4: Completed
+  approvalStatus String  @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvalNotes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MerchantDocument {
+  id                String    @id @default(uuid())
+  merchantId        String
+  merchant          Merchant  @relation(fields: [merchantId], references: [id])
+  type              String // RG_FRONT, RG_BACK, SELFIE, CNH, etc.
+  url               String
+  status            String    @default("PENDING")
+  rejectionReason   String?
+  mimeType          String?
+  fileSize          Int?
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  verificationNotes String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([merchantId, type])
+  @@index([merchantId])
+}
+
+/// ---------------------------------------
+/// API Keys models (Integração)
+/// ---------------------------------------
+
+enum ApiKeyOrigin {
+  DASHBOARD // Criada via dashboard
+  CLI // Criada via CLI
+  API // Criada via API
+}
+
+model ApiKey {
+  id          String       @id @default(uuid())
+  merchantId  String
+  merchant    Merchant     @relation(fields: [merchantId], references: [id])
+  keyHash     String       @unique // Hash da chave (nunca armazenamos a chave em texto plano)
+  keyPrefix   String // Primeiros 8 caracteres para identificação (ex: "tb_live_")
+  keySuffix   String // Últimos 4 caracteres para identificação visual
+  name        String? // Nome/descrição da chave
+  origin      ApiKeyOrigin @default(DASHBOARD)
+  permissions String[]     @default([]) // Array de permissões (ex: ["charges:read", "charges:write"])
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  revokedBy   String? // userId que revogou
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([merchantId])
+  @@index([merchantId, revokedAt])
+  @@index([keyHash])
+}
+
+/// ---------------------------------------
+/// Webhooks models (Integração)
+/// ---------------------------------------
+
+enum WebhookStatus {
+  ACTIVE
+  INACTIVE
+  FAILED // Muitas falhas consecutivas
+}
+
+model Webhook {
+  id           String        @id @default(uuid())
+  publicId     String        @unique // ID público visível (ex: "wh_abc123")
+  merchantId   String
+  merchant     Merchant      @relation(fields: [merchantId], references: [id])
+  name         String // Nome/descrição do webhook
+  url          String // URL de destino (HTTPS obrigatório)
+  secret       String // Secret para validação HMAC
+  events       String[] // Array de eventos (ex: ["billing.paid", "withdraw.done"])
+  status       WebhookStatus @default(ACTIVE)
+  failureCount Int           @default(0) // Contador de falhas consecutivas
+  lastCalledAt DateTime?
+  lastSuccess  DateTime?
+  lastFailure  DateTime?
+  lastError    String? // Última mensagem de erro
+  devMode      Boolean       @default(false) // Se true, apenas recebe eventos de teste
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Relacionamento com logs de chamadas
+  logs WebhookLog[]
+
+  @@index([merchantId])
+  @@index([merchantId, status])
+  @@index([publicId])
+}
+
+model WebhookLog {
+  id            String   @id @default(uuid())
+  webhookId     String
+  webhook       Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event         String // Tipo do evento
+  payload       Json // Payload enviado
+  responseCode  Int? // Código HTTP da resposta
+  responseBody  String? // Corpo da resposta (truncado se muito grande)
+  responseTime  Int? // Tempo de resposta em ms
+  success       Boolean
+  errorMessage  String?
+  attemptNumber Int      @default(1) // Número da tentativa (para retries)
+  createdAt     DateTime @default(now())
+
+  @@index([webhookId])
+  @@index([webhookId, createdAt])
+}
