@@ -5,7 +5,7 @@
  */
 const { Pool } = require("pg");
 
-const MAX_RETRIES = 60; // 60 tentativas = 2 minutos
+const MAX_RETRIES = 10; // 10 tentativas = 20 segundos (reduzido para não bloquear muito tempo)
 const RETRY_DELAY = 2000; // 2 segundos
 
 const waitForDatabase = async () => {
@@ -45,8 +45,10 @@ const waitForDatabase = async () => {
         console.log(`⏳ Tentativa ${attempt}/${MAX_RETRIES}: ${shortMessage}`);
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
       } else {
-        console.error(`❌ Erro após ${MAX_RETRIES} tentativas:`, error.message);
+        console.warn(`⚠️ Banco não disponível após ${MAX_RETRIES} tentativas:`, error.message);
+        console.warn(`⚠️ Continuando mesmo assim - migrations podem já estar aplicadas ou banco ainda não está acessível`);
         await pool.end();
+        // Retorna false mas não é fatal - migrations podem falhar e servidor ainda inicia
         return false;
       }
     }

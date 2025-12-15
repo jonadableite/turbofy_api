@@ -50,6 +50,6 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=30s \
   CMD ["node", "/app/healthcheck.js"]
 
 # Rodar migrations e subir servidor
-# Aguardar banco estar disponível, depois rodar migrations e iniciar servidor
-# Se o migrate deploy falhar, ainda tenta iniciar o servidor (migrations podem já estar aplicadas)
-CMD ["sh", "-c", "node wait-for-db.js && (npx prisma migrate deploy || echo '⚠️ Migrate deploy falhou, continuando...') && node dist/index.js"]
+# Migrations são opcionais - se falharem, o servidor ainda inicia
+# Útil quando o banco ainda não está acessível ou migrations já foram aplicadas
+CMD ["sh", "-c", "if node wait-for-db.js 2>/dev/null; then echo '✅ Banco disponível, aplicando migrations...' && npx prisma migrate deploy || echo '⚠️ Migrate deploy falhou, mas continuando...'; else echo '⚠️ Banco não disponível ainda, pulando migrations...'; fi && echo '🚀 Iniciando servidor...' && node dist/index.js"]
