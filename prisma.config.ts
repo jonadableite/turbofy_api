@@ -15,9 +15,8 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // DATABASE_URL pode ser opcional durante o generate (build do Docker)
-    // O Prisma generate não precisa de uma conexão real ao banco
-    // Usar process.env diretamente com fallback para evitar erro durante build
-    url: process.env.DATABASE_URL || "postgres://postgres:c4102143751b6e25d238@painel.whatlead.com.br:5436/turbofy?sslmode=disable",
+    // DATABASE_URL deve estar definida via variável de ambiente
+    // O Prisma migrate deploy requer uma conexão válida ao banco
+    url: process.env.DATABASE_URL,
   },
 });

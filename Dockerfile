@@ -11,6 +11,7 @@ RUN npm ci
 # Copiar código e configs
 COPY tsconfig*.json ./
 COPY prisma ./prisma
+COPY prisma.config.ts ./prisma.config.ts
 COPY src ./src
 COPY scripts ./scripts
 COPY docker ./docker
@@ -39,6 +40,7 @@ COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/docker/healthcheck.js ./healthcheck.js
 
 EXPOSE 3030
@@ -47,4 +49,5 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=30s \
   CMD ["node", "/app/healthcheck.js"]
 
 # Rodar migrations e subir servidor
-CMD ["sh", "-c", "npm run prisma:migrate:deploy && node dist/index.js"]
+# O prisma migrate deploy usa o prisma.config.ts para obter a DATABASE_URL
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
