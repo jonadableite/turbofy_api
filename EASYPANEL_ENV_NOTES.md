@@ -41,6 +41,9 @@ TRANSFEERA_API_URL=https://api-sandbox.transfeera.com
 TRANSFEERA_LOGIN_URL=https://login-api-sandbox.transfeera.com
 TRANSFEERA_PIX_KEY=email@exemplo.com
 TRANSFEERA_WEBHOOK_SECRET=seu_secret_minimo_32_caracteres_aqui
+
+# Panda Video (Opcional - apenas se usar vídeos)
+PANDAS_APIKEY=sua_api_key_do_panda_video
 ```
 
 ## 🔍 Problemas Comuns
