@@ -1,40 +1,58 @@
 #!/usr/bin/env node
 /**
  * Script para aguardar o banco de dados estar disponível antes de executar migrations
+ * Usa pg diretamente para evitar problemas com Prisma Client initialization
  */
-const { PrismaClient } = require("@prisma/client");
+const { Pool } = require("pg");
 
-const MAX_RETRIES = 60; // 60 tentativas = 2 minutos (30s entre tentativas)
+const MAX_RETRIES = 60; // 60 tentativas = 2 minutos
 const RETRY_DELAY = 2000; // 2 segundos
 
-const prisma = new PrismaClient();
-
 const waitForDatabase = async () => {
+  const databaseUrl = process.env.DATABASE_URL;
+  
+  if (!databaseUrl) {
+    console.error("❌ DATABASE_URL não está definida!");
+    return false;
+  }
+  
+  // Mascarar senha na URL para logs
+  const maskedUrl = databaseUrl.replace(/:([^:@]+)@/, ':****@');
   console.log("🔄 Aguardando banco de dados ficar disponível...");
-  console.log(`📍 DATABASE_URL: ${process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/:[^:@]+@/, ':****@') : 'não definida'}`);
+  console.log(`📍 DATABASE_URL: ${maskedUrl}`);
+  
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    // Não fazer connection pooling, apenas testar conectividade
+    max: 1,
+  });
   
   for (let i = 0; i < MAX_RETRIES; i++) {
     try {
       // Tentar uma query simples para verificar conectividade
-      await prisma.$queryRaw`SELECT 1`;
+      const client = await pool.connect();
+      await client.query("SELECT 1");
+      client.release();
       console.log("✅ Banco de dados está disponível!");
-      await prisma.$disconnect();
+      await pool.end();
       return true;
     } catch (error) {
       const attempt = i + 1;
       if (attempt < MAX_RETRIES) {
         const message = error.message || String(error);
-        console.log(`⏳ Tentativa ${attempt}/${MAX_RETRIES}: ${message.substring(0, 100)}`);
+        // Limitar tamanho da mensagem de erro
+        const shortMessage = message.length > 100 ? message.substring(0, 100) + "..." : message;
+        console.log(`⏳ Tentativa ${attempt}/${MAX_RETRIES}: ${shortMessage}`);
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
       } else {
         console.error(`❌ Erro após ${MAX_RETRIES} tentativas:`, error.message);
-        await prisma.$disconnect();
+        await pool.end();
         return false;
       }
     }
   }
   
-  await prisma.$disconnect();
+  await pool.end();
   return false;
 };
 
