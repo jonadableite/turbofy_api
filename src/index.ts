@@ -128,7 +128,7 @@ app.use(pinoHttp({
   } : true,
   // Reduzir drasticamente o tamanho dos logs
   serializers: {
-    req: (req) => {
+    req: (req: express.Request) => {
       // Log mínimo apenas com informações essenciais
       const base = {
         id: req.id,
@@ -143,7 +143,7 @@ app.use(pinoHttp({
       
       return base;
     },
-    res: (res) => ({
+    res: (res: express.Response) => ({
       statusCode: res.statusCode,
     }),
   },

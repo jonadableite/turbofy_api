@@ -1,15 +1,15 @@
-import { Router } from "express";
 import { randomUUID } from "crypto";
+import { Router } from "express";
 import { z, ZodError } from "zod";
 import { CreateWebhook } from "../../../application/useCases/CreateWebhook";
+import { prisma } from "../../database/prismaClient";
 import { PrismaProviderCredentialsRepository } from "../../database/repositories/PrismaProviderCredentialsRepository";
 import { PrismaWebhookRepository } from "../../database/repositories/PrismaWebhookRepository";
-import { prisma } from "../../database/prismaClient";
 import { logger } from "../../logger";
+import { decryptSecret } from "../../security/crypto";
+import { AdminVerificationController } from "../controllers/AdminVerificationController";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { requireRoles } from "../middlewares/requireRole";
-import { AdminVerificationController } from "../controllers/AdminVerificationController";
-import { decryptSecret } from "../../security/crypto";
 
 const adminRouter = Router();
 const controller = new AdminVerificationController();
@@ -156,7 +156,7 @@ adminRouter.post("/merchants/:merchantId/credentials/test", async (req, res) => 
     return res.json({
       valid: true,
       message: "Credenciais válidas na API do Turbofy",
-      environment: "TURBOFY_API",
+      environment: "api",
     });
   } catch (err) {
     if (err instanceof ZodError) {
