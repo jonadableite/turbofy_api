@@ -55,11 +55,57 @@ import { logger } from "./infrastructure/logger";
 
 const app = express();
 
-app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || "*",
-  credentials: true
+// Configurar CORS corretamente para múltiplas origens
+const corsOrigin = process.env.CORS_ORIGIN || "*";
+const allowedOrigins: string[] | "*" = corsOrigin === "*" 
+  ? "*" 
+  : corsOrigin.split(",").map((origin) => origin.trim());
+
+// Configurar Helmet para não interferir com CORS
+// IMPORTANTE: Desabilitar headers CORS do Helmet, deixar apenas o middleware cors gerenciar
+app.use(helmet({
+  crossOriginResourcePolicy: false, // Desabilitar completamente
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
 }));
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Permitir requisições sem origem (ex: Postman, mobile apps)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      // Se for "*", permitir todas as origens
+      if (allowedOrigins === "*") {
+        return callback(null, true);
+      }
+
+      // Verificar se a origem está na lista permitida
+      if (Array.isArray(allowedOrigins) && allowedOrigins.includes(origin)) {
+        // Retornar a origem específica (não true) para evitar múltiplos valores no header
+        return callback(null, origin);
+      }
+
+      // Rejeitar origem não permitida
+      callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type", 
+      "Authorization", 
+      "x-client-id", 
+      "x-client-secret", 
+      "x-idempotency-key",
+      "X-CSRF-Token",
+      "x-csrf-token"
+    ],
+    exposedHeaders: ["Set-Cookie"],
+  })
+);
+
 app.use(cookieParser());
 app.use(express.json());
 
