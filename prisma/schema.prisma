@@ -79,6 +79,7 @@ model Merchant {
   documents           MerchantDocument[]
   apiKeys             ApiKey[]
   webhooks            Webhook[]
+  transfeeraWebhookConfigs TransfeeraWebhookConfig[]
 
   @@index([tenantId])
 }
