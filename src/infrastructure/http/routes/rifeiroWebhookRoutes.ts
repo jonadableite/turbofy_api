@@ -54,6 +54,9 @@ rifeiroWebhookRouter.use(authMiddleware, webhooksRateLimiter)
 rifeiroWebhookRouter.post("/", async (req: Request, res: Response) => {
   try {
     const { url, objectTypes } = createSchema.parse(req.body)
+    if (!req.user) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Usuário não autenticado" } })
+    }
     const merchantId = await ensureMerchantId(req.user.id)
     await assertRifeiro(merchantId)
 
@@ -61,7 +64,7 @@ rifeiroWebhookRouter.post("/", async (req: Request, res: Response) => {
     return res.status(201).json(created)
   } catch (error) {
     if (error instanceof ZodError) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", details: error.errors } })
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", details: error.issues } })
     }
     if (error instanceof Error && error.message === "FORBIDDEN_RIFEIRO_ONLY") {
       return res.status(403).json({ error: { code: "FORBIDDEN", message: "Apenas rifeiros podem configurar webhooks" } })
@@ -73,6 +76,9 @@ rifeiroWebhookRouter.post("/", async (req: Request, res: Response) => {
 
 rifeiroWebhookRouter.get("/", async (req: Request, res: Response) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Usuário não autenticado" } })
+    }
     const merchantId = await ensureMerchantId(req.user.id)
     await assertRifeiro(merchantId)
 
@@ -91,6 +97,9 @@ rifeiroWebhookRouter.put("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params
     const { url, objectTypes } = updateSchema.parse(req.body)
+    if (!req.user) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Usuário não autenticado" } })
+    }
     const merchantId = await ensureMerchantId(req.user.id)
     await assertRifeiro(merchantId)
 
@@ -102,7 +111,7 @@ rifeiroWebhookRouter.put("/:id", async (req: Request, res: Response) => {
     return res.json(updated)
   } catch (error) {
     if (error instanceof ZodError) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", details: error.errors } })
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", details: error.issues } })
     }
     if (error instanceof Error && error.message === "WEBHOOK_NOT_FOUND") {
       return res.status(404).json({ error: { code: "WEBHOOK_NOT_FOUND", message: "Webhook não encontrado" } })
@@ -118,6 +127,9 @@ rifeiroWebhookRouter.put("/:id", async (req: Request, res: Response) => {
 rifeiroWebhookRouter.delete("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params
+    if (!req.user) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Usuário não autenticado" } })
+    }
     const merchantId = await ensureMerchantId(req.user.id)
     await assertRifeiro(merchantId)
 
@@ -137,6 +149,9 @@ rifeiroWebhookRouter.delete("/:id", async (req: Request, res: Response) => {
 
 rifeiroWebhookRouter.post("/:id/test", async (req: Request, res: Response) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Usuário não autenticado" } })
+    }
     const merchantId = await ensureMerchantId(req.user.id)
     await assertRifeiro(merchantId)
     const { id } = testSchema.parse({ id: req.params.id })
@@ -145,7 +160,7 @@ rifeiroWebhookRouter.post("/:id/test", async (req: Request, res: Response) => {
     return res.json(result)
   } catch (error) {
     if (error instanceof ZodError) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", details: error.errors } })
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", details: error.issues } })
     }
     if (error instanceof Error && error.message === "WEBHOOK_NOT_FOUND") {
       return res.status(404).json({ error: { code: "WEBHOOK_NOT_FOUND", message: "Webhook não encontrado" } })

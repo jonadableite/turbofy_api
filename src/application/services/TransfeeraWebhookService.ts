@@ -55,7 +55,7 @@ export class TransfeeraWebhookService {
     const created = await this.repo.create({
       merchantId,
       webhookId: remote.id,
-      accountId: remote.company_id || remote.account_id || merchantId,
+      accountId: remote.company_id || merchantId,
       url: remote.url,
       objectTypes: remote.object_types ?? objectTypes,
       signatureSecret: remote.signature_secret,
