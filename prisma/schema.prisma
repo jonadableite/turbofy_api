@@ -1140,3 +1140,27 @@ model WebhookLog {
   @@index([webhookId])
   @@index([webhookId, createdAt])
 }
+
+/// ---------------------------------------
+/// Transfeera Webhooks (Integração Rifeiro)
+/// ---------------------------------------
+
+model TransfeeraWebhookConfig {
+  id              String   @id @default(uuid())
+  merchantId      String   @map("merchant_id")
+  merchant        Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  webhookId       String   @unique @map("webhook_id") // ID retornado pela Transfeera
+  accountId       String   @map("account_id") // company_id/account_id retornado pela Transfeera
+  url             String
+  objectTypes     String[] @map("object_types") // Tipos de eventos (ex: ["Payin", "CashIn"])
+  signatureSecret String   @map("signature_secret") // Criptografado (AES-256-GCM)
+  schemaVersion   String   @default("v1") @map("schema_version")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("transfeera_webhook_configs")
+  @@index([merchantId])
+  @@index([webhookId])
+  @@index([accountId])
+}

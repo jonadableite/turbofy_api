@@ -44,6 +44,7 @@ import { productCheckoutRouter } from "./infrastructure/http/routes/productCheck
 import { productsRouter } from "./infrastructure/http/routes/productsRoutes";
 import { reconciliationsRouter } from "./infrastructure/http/routes/reconciliationsRoutes";
 import { rifeiroRouter } from "./infrastructure/http/routes/rifeiroRoutes";
+import { rifeiroWebhookRouter } from "./infrastructure/http/routes/rifeiroWebhookRoutes";
 import { settlementsRouter } from "./infrastructure/http/routes/settlementsRoutes";
 import { studioRouter } from "./infrastructure/http/routes/studioRoutes";
 import { transfeeraWebhookRouter } from "./infrastructure/http/routes/transfeeraWebhookRoutes";
@@ -238,6 +239,7 @@ app.use('/admin', adminRouter);
 app.use('/api-keys', apiKeysRouter);
 app.use('/webhooks', webhooksRouter);
 app.use('/coupons', couponsRouter);
+app.use('/rifeiro/webhooks', rifeiroWebhookRouter);
 app.use('/rifeiro', rifeiroRouter);
 // Producer splits deve vir antes da rota genérica para não ser interceptada
 app.use('/producer/splits', producerSplitsRouter);

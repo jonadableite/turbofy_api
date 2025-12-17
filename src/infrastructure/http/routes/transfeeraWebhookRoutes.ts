@@ -19,6 +19,7 @@ import { PrismaWebhookAttemptRepository } from "../../database/PrismaWebhookAtte
 import { PrismaCourseRepository } from "../../database/repositories/PrismaCourseRepository";
 import { PrismaEnrollmentRepository } from "../../database/repositories/PrismaEnrollmentRepository";
 import { PrismaPaymentInteractionRepository } from "../../database/repositories/PrismaPaymentInteractionRepository";
+import { PrismaTransfeeraWebhookConfigRepository } from "../../database/repositories/PrismaTransfeeraWebhookConfigRepository";
 import { EmailService } from "../../email/EmailService";
 import { logger } from "../../logger";
 
@@ -84,45 +85,65 @@ transfeeraWebhookRouter.post("/", async (req: Request, res: Response) => {
     const raw = (req as any).rawBody as Buffer | undefined;
     const sigHeader = (req.headers["x-transfeera-signature"] || req.headers["x-signature"] || req.headers["x-hub-signature-256"]) as string | undefined;
     const start = process.hrtime.bigint();
-    // Validar assinatura apenas se TRANSFEERA_WEBHOOK_SECRET estiver configurado
-    // Lê diretamente do process.env para permitir testes que alteram NODE_ENV em runtime
-    const webhookSecret = process.env.TRANSFEERA_WEBHOOK_SECRET || env.TRANSFEERA_WEBHOOK_SECRET;
     const isTestMode = process.env.NODE_ENV === "test";
+    const event = req.body as TransfeeraWebhookEvent;
+    const webhookConfigRepo = new PrismaTransfeeraWebhookConfigRepository();
+    const attemptRepo = new PrismaWebhookAttemptRepository();
     
     // Em modo de teste, pula a validação completamente para facilitar os testes unitários
     // Os testes específicos de assinatura alteram NODE_ENV para "production" para testar a validação
     if (isTestMode) {
       logger.info({}, "Test mode: skipping signature validation");
-    } else if (webhookSecret) {
-      // Se o secret está configurado, validar assinatura
+    } else {
+      // Se o secret está configurado no banco, validar assinatura
       if (!raw || !sigHeader) {
-        const event = req.body as TransfeeraWebhookEvent;
-        const repo = new PrismaWebhookAttemptRepository();
-        await repo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
+        await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
         return res.status(401).json({ error: "INVALID_SIGNATURE" });
       }
-      
-      const sh = sigHeader as string;
-      const provided = sh.startsWith("sha256=") ? sh.slice(7) : sh;
-      if (!env.TRANSFEERA_WEBHOOK_SECRET) {
-        const event = req.body as TransfeeraWebhookEvent;
-        const repo = new PrismaWebhookAttemptRepository();
-        await repo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
+
+      const config = await webhookConfigRepo.findByAccountId(event.account_id);
+      if (!config) {
+        await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
+        return res.status(401).json({ error: "WEBHOOK_NOT_CONFIGURED" });
+      }
+
+      const secret = await webhookConfigRepo.getSignatureSecret(config.webhookId);
+      if (!secret) {
+        await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
         return res.status(500).json({ error: "WEBHOOK_SECRET_NOT_CONFIGURED" });
       }
-      const expected = crypto.createHmac("sha256", env.TRANSFEERA_WEBHOOK_SECRET).update(raw ?? Buffer.from(JSON.stringify(req.body))).digest("hex");
-      const valid = provided === expected || (provided.length === expected.length && crypto.timingSafeEqual(Buffer.from(provided, "hex"), Buffer.from(expected, "hex")));
-      
-      if (!valid) {
-        const event = req.body as TransfeeraWebhookEvent;
-        const repo = new PrismaWebhookAttemptRepository();
-        await repo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
+
+      const rawPayload = raw ? raw.toString("utf8") : JSON.stringify(req.body);
+      const signatureHeader = sigHeader as string;
+
+      // Formato esperado: t=timestamp,v1=signature
+      let provided = "";
+      let timestamp = "";
+      if (signatureHeader.includes("t=") && signatureHeader.includes("v1=")) {
+        const parts = signatureHeader.split(",").map((p) => p.trim());
+        for (const part of parts) {
+          const [k, v] = part.split("=");
+          if (k === "t") timestamp = v;
+          if (k === "v1") provided = v;
+        }
+      } else {
+        provided = signatureHeader.startsWith("sha256=") ? signatureHeader.slice(7) : signatureHeader;
+      }
+
+      if (!provided) {
+        await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
         return res.status(401).json({ error: "INVALID_SIGNATURE" });
       }
-    } else {
-      logger.warn("TRANSFEERA_WEBHOOK_SECRET not configured - skipping signature validation (development mode)");
+
+      const message = timestamp ? `${timestamp}.${rawPayload}` : rawPayload;
+      const expected = crypto.createHmac("sha256", secret).update(message).digest("hex");
+      const valid = provided === expected || (provided.length === expected.length && crypto.timingSafeEqual(Buffer.from(provided, "hex"), Buffer.from(expected, "hex")));
+
+      if (!valid) {
+        await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
+        return res.status(401).json({ error: "INVALID_SIGNATURE" });
+      }
     }
-    const event = req.body as TransfeeraWebhookEvent;
 
     logger.info(
       {
