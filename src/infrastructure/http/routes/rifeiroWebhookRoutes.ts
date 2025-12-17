@@ -79,17 +79,35 @@ rifeiroWebhookRouter.get("/", async (req: Request, res: Response) => {
     if (!req.user) {
       return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Usuário não autenticado" } })
     }
-    const merchantId = await ensureMerchantId(req.user.id)
-    await assertRifeiro(merchantId)
-
-    const list = await webhookService.listWebhooks(merchantId)
-    return res.json(list)
-  } catch (error) {
-    if (error instanceof Error && error.message === "FORBIDDEN_RIFEIRO_ONLY") {
-      return res.status(403).json({ error: { code: "FORBIDDEN", message: "Apenas rifeiros podem listar webhooks" } })
+    
+    let merchantId: string;
+    try {
+      merchantId = await ensureMerchantId(req.user.id)
+    } catch (err) {
+      logger.error({ err, userId: req.user.id }, "Error ensuring merchantId")
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Erro ao obter merchantId" } })
     }
-    logger.error({ error }, "Error listing webhooks")
-    return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Erro ao listar webhooks" } })
+
+    try {
+      await assertRifeiro(merchantId)
+    } catch (err) {
+      if (err instanceof Error && err.message === "FORBIDDEN_RIFEIRO_ONLY") {
+        return res.status(403).json({ error: { code: "FORBIDDEN", message: "Apenas rifeiros podem listar webhooks" } })
+      }
+      logger.error({ err, merchantId }, "Error asserting rifeiro")
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Erro ao validar tipo de merchant" } })
+    }
+
+    try {
+      const list = await webhookService.listWebhooks(merchantId)
+      return res.json(list)
+    } catch (err) {
+      logger.error({ err, merchantId }, "Error listing webhooks from service")
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Erro ao listar webhooks" } })
+    }
+  } catch (error) {
+    logger.error({ error }, "Unexpected error in GET /rifeiro/webhooks")
+    return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Erro interno ao processar requisição" } })
   }
 })
 
