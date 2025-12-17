@@ -65,6 +65,7 @@ Login com suporte a HttpOnly cookies.
 **Cookies (HttpOnly):**
 - `accessToken` - Expira em 15 minutos
 - `refreshToken` - Expira em 7 dias
+- **Configuração**: `httpOnly: true`, `secure: true` (prod), `sameSite: 'lax'`, `domain: '.turbofypay.com'` (prod)
 
 ---
 
@@ -107,8 +108,10 @@ Registro com suporte a HttpOnly cookies.
 ### HttpOnly Cookies
 - ✅ Tokens JWT armazenados em cookies HttpOnly
 - ✅ `secure: true` em produção (HTTPS only)
-- ✅ `sameSite: 'strict'` para proteção CSRF
+- ✅ `sameSite: 'lax'` para permitir navegações top-level (após login)
+- ✅ `domain: '.turbofypay.com'` em produção para funcionar em subdomínios
 - ✅ Tokens ainda retornados no JSON para compatibilidade
+- ℹ️ `sameSite: 'lax'` permite cookies em navegações mas ainda protege contra CSRF
 
 <!-- reCAPTCHA removido do backend -->
 

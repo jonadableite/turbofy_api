@@ -155,20 +155,24 @@ authRouter.post('/register', authLimiter, async (req: Request, res: Response) =>
 
     // Configurar HttpOnly cookies
     const isProduction = process.env.NODE_ENV === 'production';
+    const cookieDomain = isProduction ? '.turbofypay.com' : undefined;
+    
     res.cookie('accessToken', tokens.accessToken, {
       httpOnly: true,
       secure: isProduction, // HTTPS only em produção
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 15 * 60 * 1000, // 15 minutos
       path: '/',
+      ...(cookieDomain && { domain: cookieDomain }),
     });
 
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
       path: '/',
+      ...(cookieDomain && { domain: cookieDomain }),
     });
 
     res.status(201).json({
@@ -209,20 +213,24 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
 
     // Configurar HttpOnly cookies
     const isProduction = process.env.NODE_ENV === 'production';
+    const cookieDomain = isProduction ? '.turbofypay.com' : undefined; // Funciona em todos os subdomínios
+    
     res.cookie('accessToken', tokens.accessToken, {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: 'strict',
+      secure: isProduction, // HTTPS only em produção
+      sameSite: 'lax', // Permite cookies em navegações top-level (após login)
       maxAge: 15 * 60 * 1000, // 15 minutos
       path: '/',
+      ...(cookieDomain && { domain: cookieDomain }), // Domain apenas em produção
     });
 
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
+      sameSite: 'lax', // Permite cookies em navegações top-level
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
       path: '/',
+      ...(cookieDomain && { domain: cookieDomain }), // Domain apenas em produção
     });
 
     res.json({
@@ -266,8 +274,17 @@ authRouter.post('/logout', async (req: Request, res: Response) => {
     }
 
     // Sempre limpar cookies (mesmo sem token válido)
-    res.clearCookie('accessToken', { path: '/' });
-    res.clearCookie('refreshToken', { path: '/' });
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieDomain = isProduction ? '.turbofypay.com' : undefined;
+    
+    res.clearCookie('accessToken', { 
+      path: '/',
+      ...(cookieDomain && { domain: cookieDomain }),
+    });
+    res.clearCookie('refreshToken', { 
+      path: '/',
+      ...(cookieDomain && { domain: cookieDomain }),
+    });
     
     res.json({ success: true });
   } catch (err) {
@@ -292,20 +309,24 @@ authRouter.post('/refresh', async (req: Request, res: Response) => {
 
     // Configurar novos cookies
     const isProduction = process.env.NODE_ENV === 'production';
+    const cookieDomain = isProduction ? '.turbofypay.com' : undefined;
+    
     res.cookie('accessToken', tokens.accessToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 15 * 60 * 1000,
       path: '/',
+      ...(cookieDomain && { domain: cookieDomain }),
     });
 
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
+      ...(cookieDomain && { domain: cookieDomain }),
     });
 
     res.json({
@@ -352,20 +373,24 @@ authRouter.post('/mfa/verify', mfaLimiter, async (req: Request, res: Response) =
 
     // Configurar HttpOnly cookies
     const isProduction = process.env.NODE_ENV === 'production';
+    const cookieDomain = isProduction ? '.turbofypay.com' : undefined;
+    
     res.cookie('accessToken', tokens.accessToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 15 * 60 * 1000,
       path: '/',
+      ...(cookieDomain && { domain: cookieDomain }),
     });
 
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
+      ...(cookieDomain && { domain: cookieDomain }),
     });
 
     res.json({
