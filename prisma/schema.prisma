@@ -43,42 +43,64 @@ enum MerchantType {
   RIFEIRO // Organizadores de rifas (Painel Rifeiro)
 }
 
+/// ---------------------------------------
+/// User Role Enum (Permissões do Usuário)
+/// ---------------------------------------
+/// Roles definem as permissões e acesso do usuário no sistema:
+/// - OWNER: Proprietário (acesso total à organização)
+/// - ADMIN: Administrador (gerenciamento completo)
+/// - MANAGER: Gerente (gerenciamento de produtos e afiliados)
+/// - SUPPORT: Suporte (visualização de finanças)
+/// - COPRODUCER: Coprodutor (gerenciamento de produtos e cursos)
+/// - AFFILIATE: Afiliado (visualização de afiliações)
+/// - BUYER: Comprador (acesso à área de membros)
+
+enum UserRole {
+  OWNER // Proprietário (acesso total)
+  ADMIN // Administrador
+  MANAGER // Gerente
+  SUPPORT // Suporte
+  COPRODUCER // Coprodutor
+  AFFILIATE // Afiliado
+  BUYER // Comprador
+}
+
 model Merchant {
-  id                  String                @id @default(uuid())
-  name                String
-  email               String                @unique
-  document            String                @unique
-  type                MerchantType          @default(PRODUCER)
-  tenantId            String? // Opcional até multi-tenancy estar implementado
-  tenant              Tenant?               @relation(fields: [tenantId], references: [id])
-  feePercentage       Decimal               @default(3.5) // 3.5% producer, 2.5% rifeiro (MENORES DO MERCADO!)
-  active              Boolean               @default(true)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  payments            Payment[]
-  pixKeys             PixKey[]
-  charges             Charge[]
-  chargeSplits        ChargeSplit[]
-  settlements         Settlement[]
-  reconciliations     Reconciliation[]
-  balance             Decimal               @default(0)
-  fee                 Decimal               @default(0)
-  bankAccount         BankAccount?
-  checkoutConfig      CheckoutConfig?
-  checkoutSessions    CheckoutSession[]
-  users               User[]
-  providerCredentials ProviderCredentials[]
-  paymentInteractions PaymentInteraction[]
-  courses             Course[]
-  domainConfig        DomainConfig?
-  wallet              Wallet?
-  affiliates          Affiliate[]
-  commissionRules     CommissionRule[]
-  raffles             Raffle[]
-  profile             MerchantProfile?
-  documents           MerchantDocument[]
-  apiKeys             ApiKey[]
-  webhooks            Webhook[]
+  id                       String                    @id @default(uuid())
+  name                     String
+  email                    String                    @unique
+  document                 String                    @unique
+  type                     MerchantType              @default(PRODUCER)
+  tenantId                 String? // Opcional até multi-tenancy estar implementado
+  tenant                   Tenant?                   @relation(fields: [tenantId], references: [id])
+  feePercentage            Decimal                   @default(3.5) // 3.5% producer, 2.5% rifeiro (MENORES DO MERCADO!)
+  active                   Boolean                   @default(true)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  payments                 Payment[]
+  pixKeys                  PixKey[]
+  charges                  Charge[]
+  chargeSplits             ChargeSplit[]
+  settlements              Settlement[]
+  reconciliations          Reconciliation[]
+  balance                  Decimal                   @default(0)
+  fee                      Decimal                   @default(0)
+  bankAccount              BankAccount?
+  checkoutConfig           CheckoutConfig?
+  checkoutSessions         CheckoutSession[]
+  users                    User[]
+  providerCredentials      ProviderCredentials[]
+  paymentInteractions      PaymentInteraction[]
+  courses                  Course[]
+  domainConfig             DomainConfig?
+  wallet                   Wallet?
+  affiliates               Affiliate[]
+  commissionRules          CommissionRule[]
+  raffles                  Raffle[]
+  profile                  MerchantProfile?
+  documents                MerchantDocument[]
+  apiKeys                  ApiKey[]
+  webhooks                 Webhook[]
   transfeeraWebhookConfigs TransfeeraWebhookConfig[]
 
   @@index([tenantId])
@@ -88,7 +110,7 @@ model User {
   id                  String               @id @default(uuid())
   email               String               @unique
   passwordHash        String
-  roles               String[]
+  roles               UserRole[]           @default([BUYER]) // Array de roles do usuário
   document            String               @unique // CPF ou CNPJ
   phone               String? // Telefone para SMS/WhatsApp MFA futuro
   tenantId            String?
@@ -1160,8 +1182,8 @@ model TransfeeraWebhookConfig {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  @@map("transfeera_webhook_configs")
   @@index([merchantId])
   @@index([webhookId])
   @@index([accountId])
+  @@map("transfeera_webhook_configs")
 }
