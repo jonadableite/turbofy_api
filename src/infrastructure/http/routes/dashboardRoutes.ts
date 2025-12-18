@@ -2,6 +2,7 @@ import { Request, Response, Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { PaymentProviderFactory } from '../../adapters/payment/PaymentProviderFactory';
 import { prisma } from '../../database/prismaClient';
+import { Prisma } from '@prisma/client';
 import { PrismaPaymentInteractionRepository } from '../../database/repositories/PrismaPaymentInteractionRepository';
 import { PrismaProviderCredentialsRepository } from '../../database/repositories/PrismaProviderCredentialsRepository';
 import { logger } from '../../logger';

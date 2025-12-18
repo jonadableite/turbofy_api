@@ -202,6 +202,7 @@ authRouter.post('/register', authLimiter, async (req: Request, res: Response) =>
 authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
   const span = tracer.startSpan('auth.login');
   try {
+    const isProduction = process.env.NODE_ENV === 'production';
     const inputData = req.body;
     const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
 
@@ -214,7 +215,7 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
     // Configurar HttpOnly cookies
     const originHost = req.headers.origin ?? '';
     const isLocalhost = originHost.includes('localhost');
-    const useSecureCookie = !isLocalhost && process.env.NODE_ENV === 'production';
+    const useSecureCookie = !isLocalhost && isProduction;
     const cookieDomain = useSecureCookie ? '.turbofypay.com' : undefined; // Domain somente em produção
     // #region agent log
     void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
