@@ -4,14 +4,14 @@ WORKDIR /app
 # Dependências do sistema necessárias para o Prisma
 RUN apk add --no-cache libc6-compat
 
-# Copiar manifests e instalar dependências (inclui dev para build)
+# Copiar manifests + prisma antes do npm ci (postinstall roda prisma:generate e precisa do schema)
 COPY package*.json ./
-RUN npm ci
-
-# Copiar código e configs
-COPY tsconfig*.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
+RUN npm ci
+
+# Copiar código e configs restantes
+COPY tsconfig*.json ./
 COPY src ./src
 COPY scripts ./scripts
 COPY docker ./docker
