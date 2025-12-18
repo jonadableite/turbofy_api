@@ -1,12 +1,11 @@
-import { Router, Request, Response } from 'express';
+import { Request, Response, Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import { PaymentProviderFactory } from '../../adapters/payment/PaymentProviderFactory';
 import { prisma } from '../../database/prismaClient';
+import { PrismaPaymentInteractionRepository } from '../../database/repositories/PrismaPaymentInteractionRepository';
+import { PrismaProviderCredentialsRepository } from '../../database/repositories/PrismaProviderCredentialsRepository';
 import { logger } from '../../logger';
 import { authMiddleware } from '../middlewares/authMiddleware';
-import { PrismaProviderCredentialsRepository } from '../../database/repositories/PrismaProviderCredentialsRepository';
-import { PaymentProviderFactory } from '../../adapters/payment/PaymentProviderFactory';
-import { Prisma } from '@prisma/client';
-import { PrismaPaymentInteractionRepository } from '../../database/repositories/PrismaPaymentInteractionRepository';
 
 export const dashboardRouter = Router();
 const paymentInteractionRepository =
@@ -615,7 +614,7 @@ dashboardRouter.get(
               message: 'merchantId não associado',
             },
           });
-      if (!req.user.roles?.includes('owner'))
+      if (!req.user.roles?.some(r => r.toUpperCase() === 'OWNER'))
         return res
           .status(403)
           .json({

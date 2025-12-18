@@ -153,11 +153,42 @@ export class AuthService {
 
   async refreshToken(token: string) {
     try {
+      // #region agent log
+      void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix',
+          hypothesisId: 'H3',
+          location: 'AuthService.refreshToken:start',
+          message: 'Refresh chamado',
+          data: { tokenPresent: Boolean(token) },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+
       const payload = jwt.verify(token, env.JWT_SECRET) as { sub: string };
       const user = await prisma.user.findUnique({ where: { id: payload.sub } });
       if (!user) throw new Error('Invalid token');
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
       const record = await prisma.userToken.findUnique({ where: { tokenHash } });
+      // #region agent log
+      void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix',
+          hypothesisId: 'H3',
+          location: 'AuthService.refreshToken:record',
+          message: 'Registro de refresh verificado',
+          data: { userFound: Boolean(user), recordFound: Boolean(record), revoked: Boolean(record?.revokedAt) },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       if (!record || record.revokedAt) {
         // token reuse or unknown token; revoke all tokens for safety
         await prisma.userToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } });

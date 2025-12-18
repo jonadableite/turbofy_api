@@ -212,12 +212,29 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
     const tokens = await authService.login(input, clientIp);
 
     // Configurar HttpOnly cookies
-    const isProduction = process.env.NODE_ENV === 'production';
-    const cookieDomain = isProduction ? '.turbofypay.com' : undefined; // Funciona em todos os subdomínios
+    const originHost = req.headers.origin ?? '';
+    const isLocalhost = originHost.includes('localhost');
+    const useSecureCookie = !isLocalhost && process.env.NODE_ENV === 'production';
+    const cookieDomain = useSecureCookie ? '.turbofypay.com' : undefined; // Domain somente em produção
+    // #region agent log
+    void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'pre-fix',
+        hypothesisId: 'H4',
+        location: 'authRoutes:/auth/login:before-cookies',
+        message: 'Emitindo cookies de login',
+        data: { useSecureCookie, cookieDomain, accessLen: tokens.accessToken?.length ?? 0, refreshLen: tokens.refreshToken?.length ?? 0 },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     
     res.cookie('accessToken', tokens.accessToken, {
       httpOnly: true,
-      secure: isProduction, // HTTPS only em produção
+      secure: useSecureCookie, // HTTPS only em produção
       sameSite: 'lax', // Permite cookies em navegações top-level (após login)
       maxAge: 15 * 60 * 1000, // 15 minutos
       path: '/',
@@ -226,7 +243,7 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
 
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
-      secure: isProduction,
+      secure: useSecureCookie,
       sameSite: 'lax', // Permite cookies em navegações top-level
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
       path: '/',
@@ -239,6 +256,21 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response) => {
       refreshToken: tokens.refreshToken,
       expiresIn: 15 * 60, // 15 minutos em segundos
     });
+    // #region agent log
+    void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'pre-fix',
+        hypothesisId: 'H4',
+        location: 'authRoutes:/auth/login:success',
+        message: 'Login respondeu com sucesso',
+        data: { isProduction, setCookieAccess: true, setCookieRefresh: true },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({
@@ -273,9 +305,27 @@ authRouter.post('/logout', async (req: Request, res: Response) => {
       logger.info({ tokenLength: token.length }, 'Token invalidated on logout');
     }
 
-    // Sempre limpar cookies (mesmo sem token válido)
-    const isProduction = process.env.NODE_ENV === 'production';
-    const cookieDomain = isProduction ? '.turbofypay.com' : undefined;
+    // Sempre limpar cookies (mesmo sem token válido) - em localhost não usar domain/secure de produção
+    const originHost = req.headers.origin ?? '';
+    const isLocalhost = originHost.includes('localhost');
+    const useSecureCookie = !isLocalhost && process.env.NODE_ENV === 'production';
+    const cookieDomain = useSecureCookie ? '.turbofypay.com' : undefined;
+
+    // #region agent log
+    void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'post-fix',
+        hypothesisId: 'H6',
+        location: 'authRoutes:/auth/logout:clear',
+        message: 'Limpando cookies no logout',
+        data: { origin: originHost || null, isLocalhost, useSecureCookie, cookieDomain: cookieDomain ?? null },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     
     res.clearCookie('accessToken', { 
       path: '/',
@@ -298,22 +348,57 @@ authRouter.post('/logout', async (req: Request, res: Response) => {
 
 // POST /auth/refresh - Refresh token
 authRouter.post('/refresh', async (req: Request, res: Response) => {
+  const hasCookieRefresh = Boolean(req.cookies?.refreshToken);
+  const hasBodyRefresh = Boolean(req.body && req.body.refreshToken);
+  const originHost = req.headers.origin ?? '';
+  const isLocalhost = originHost.includes('localhost');
+  const useSecureCookie = !isLocalhost && process.env.NODE_ENV === 'production';
+  const cookieDomain = useSecureCookie ? '.turbofypay.com' : undefined;
+
+  // #region agent log
+  void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: 'debug-session',
+      runId: 'pre-fix',
+      hypothesisId: 'H2',
+      location: 'authRoutes:/auth/refresh:entry',
+      message: 'Refresh solicitado',
+      data: { hasCookieRefresh, hasBodyRefresh, origin: req.headers.origin ?? null },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   try {
     const refreshToken = req.cookies.refreshToken || (req.body && req.body.refreshToken);
     
     if (!refreshToken) {
+      // #region agent log
+      void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix',
+          hypothesisId: 'H2',
+          location: 'authRoutes:/auth/refresh:missing',
+          message: 'Refresh token ausente',
+          data: { hasCookieRefresh, hasBodyRefresh, origin: req.headers.origin ?? null },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       return res.status(401).json({ error: { code: 'REFRESH_TOKEN_MISSING', message: 'Refresh token não fornecido' } });
     }
 
     const tokens = await authService.refreshToken(refreshToken);
 
     // Configurar novos cookies
-    const isProduction = process.env.NODE_ENV === 'production';
-    const cookieDomain = isProduction ? '.turbofypay.com' : undefined;
-    
     res.cookie('accessToken', tokens.accessToken, {
       httpOnly: true,
-      secure: isProduction,
+      secure: useSecureCookie,
       sameSite: 'lax',
       maxAge: 15 * 60 * 1000,
       path: '/',
@@ -322,12 +407,28 @@ authRouter.post('/refresh', async (req: Request, res: Response) => {
 
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
-      secure: isProduction,
+      secure: useSecureCookie,
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
       ...(cookieDomain && { domain: cookieDomain }),
     });
+
+    // #region agent log
+    void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'pre-fix',
+        hypothesisId: 'H2',
+        location: 'authRoutes:/auth/refresh:success',
+        message: 'Refresh emitido',
+        data: { issuedAccess: Boolean(tokens?.accessToken), issuedRefresh: Boolean(tokens?.refreshToken), userAgent: req.headers['user-agent'] ?? null },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
 
     res.json({
       accessToken: tokens.accessToken,
@@ -335,6 +436,21 @@ authRouter.post('/refresh', async (req: Request, res: Response) => {
       expiresIn: 15 * 60,
     });
   } catch (err) {
+    // #region agent log
+    void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'pre-fix',
+        hypothesisId: 'H2',
+        location: 'authRoutes:/auth/refresh:catch',
+        message: 'Erro ao renovar',
+        data: { error: err instanceof Error ? err.message : 'unknown', origin: req.headers.origin ?? null },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     logger.error({ err }, 'Erro ao renovar token');
     res.status(401).json({ error: { code: 'INVALID_REFRESH_TOKEN', message: 'Token de renovação inválido' } });
   }

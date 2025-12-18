@@ -11,7 +11,10 @@ export const requireRoles = (...roles: string[]) => {
       });
     }
 
-    const hasRole = req.user.roles?.some((role) => roles.includes(role));
+    const expectedRoles = roles.map((role) => role.toUpperCase());
+    const hasRole = req.user.roles?.some((role) =>
+      expectedRoles.includes(role.toUpperCase())
+    );
     if (!hasRole) {
       return res.status(403).json({
         error: {
@@ -24,5 +27,4 @@ export const requireRoles = (...roles: string[]) => {
     return next();
   };
 };
-
 

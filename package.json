@@ -5,6 +5,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "postinstall": "npm run prisma:generate",
+    "predev": "npm run prisma:generate",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "npm run prisma:generate && tsc -p tsconfig.build.json",
     "build:docker": "node scripts/build-docker.js",

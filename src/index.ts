@@ -278,6 +278,22 @@ logger.info({ port: PORT, httpsEnabled: env.HTTPS_ENABLED, httpsPort: HTTPS_PORT
 
 const bootstrap = async () => {
   try {
+    // #region agent log
+    void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'pre-fix',
+        hypothesisId: 'H1',
+        location: 'api/src/index.ts:bootstrap:start',
+        message: 'Bootstrap iniciado',
+        data: { port: PORT, httpsEnabled: env.HTTPS_ENABLED, nodeEnv: env.NODE_ENV },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
     let chargePaidConsumer: Awaited<ReturnType<typeof startChargePaidConsumer>> | null = null;
     let chargeExpiredConsumer: Awaited<ReturnType<typeof startChargeExpiredConsumer>> | null = null;
     let documentValidationConsumer: Awaited<ReturnType<typeof startDocumentValidationConsumer>> | null = null;
@@ -394,6 +410,22 @@ const bootstrap = async () => {
       void shutdown('SIGINT');
     });
   } catch (err) {
+    // #region agent log
+    void fetch('http://127.0.0.1:7242/ingest/480d274d-bf63-41e3-b593-f2456c48c70b', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'pre-fix',
+        hypothesisId: 'H1',
+        location: 'api/src/index.ts:bootstrap:catch',
+        message: 'Bootstrap falhou',
+        data: { error: err instanceof Error ? err.message : 'unknown' },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
     logger.error({ err }, '[ERROR] Erro fatal ao inicializar servidor');
     console.error(chalk.red(`\n❌ Erro fatal: ${err instanceof Error ? err.message : 'Erro desconhecido'}\n`));
     process.exit(1);
