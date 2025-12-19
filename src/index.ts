@@ -60,6 +60,9 @@ import { logger } from "./infrastructure/logger";
 
 const app = express();
 
+// Trust proxy para funcionar corretamente atrás de Cloudflare/NGINX
+app.set('trust proxy', true);
+
 // Configurar CORS corretamente para múltiplas origens
 const corsOrigin = process.env.CORS_ORIGIN || "*";
 const allowedOrigins: string[] | "*" = corsOrigin === "*" 
