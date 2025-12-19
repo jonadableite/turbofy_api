@@ -38,7 +38,18 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       exp: number;
     };
 
-    const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { id: true, email: true, roles: true, merchantId: true } });
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        email: true,
+        roles: true,
+        merchantId: true,
+        kycStatus: true,
+        documentType: true,
+        document: true,
+      },
+    });
     if (!user) {
       logger.warn({ msg: 'User not found', userId: payload.sub });
       return res.status(401).json({ error: 'Unauthorized' });

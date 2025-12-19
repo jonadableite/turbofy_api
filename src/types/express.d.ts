@@ -13,6 +13,9 @@ declare global {
         email: string;
         roles: string[];
         merchantId: string | null;
+        kycStatus?: string;
+        documentType?: string | null;
+        document?: string | null;
       };
     }
   }

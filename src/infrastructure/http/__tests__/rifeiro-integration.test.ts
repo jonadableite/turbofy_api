@@ -112,7 +112,7 @@ describe("Rifeiro Integration - Fluxo Completo", () => {
         email: `rifeiro-${timestamp}@test-rifeiro.com`,
         document: rifeiroDocument,
         passwordHash: "hashed",
-        roles: ["USER"],
+        roles: ["BUYER"],
       },
     });
 
@@ -155,7 +155,7 @@ describe("Rifeiro Integration - Fluxo Completo", () => {
         email: `producer-${timestamp}@test-rifeiro.com`,
         document: producerDocument,
         passwordHash: "hashed",
-        roles: ["USER"],
+        roles: ["BUYER"],
       },
     });
 
@@ -414,7 +414,7 @@ describe("Rifeiro Integration - Fluxo Completo", () => {
           email: `producer2-${Date.now()}@test-rifeiro.com`,
           document: producer2Document,
           passwordHash: "hashed",
-          roles: ["USER"],
+          roles: ["BUYER"],
         },
       });
 
