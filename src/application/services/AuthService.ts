@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { prisma } from '../../infrastructure/database/prismaClient';
+import { UserRole } from "@prisma/client";
 import { env } from '../../config/env';
 import { z } from 'zod';
 import { logger } from '../../infrastructure/logger';
@@ -39,7 +40,15 @@ export class AuthService {
       throw new Error('Email already registered');
     }
     const passwordHash = await AuthService.hashPassword(data.password);
-    const user = await prisma.user.create({ data: { email: data.email, passwordHash, roles: ['USER'], document: data.document, phone: data.phone } });
+    const user = await prisma.user.create({
+      data: {
+        email: data.email,
+        passwordHash,
+        roles: [UserRole.BUYER],
+        document: data.document,
+        phone: data.phone,
+      },
+    });
     // generate tokens immediately with rotation tracking
     return this.issueTokens(user.id, user.roles);
   }
