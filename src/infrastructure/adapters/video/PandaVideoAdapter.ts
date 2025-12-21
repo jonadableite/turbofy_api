@@ -32,7 +32,12 @@ export class PandaVideoAdapter implements VideoProviderPort {
       return pandaVideos.map((v) => this.toDomainVideo(v));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage }, "Failed to list videos from Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_LIST_FAILED",
+        message: "Failed to list videos from Panda Video",
+        error,
+        payload: { error: errorMessage },
+      });
       throw new Error(`Failed to list videos: ${errorMessage}`);
     }
   }
@@ -43,7 +48,12 @@ export class PandaVideoAdapter implements VideoProviderPort {
       return this.toDomainVideo(pandaVideo);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage, videoId }, "Failed to get video from Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_GET_FAILED",
+        message: "Failed to get video from Panda Video",
+        error,
+        payload: { videoId, error: errorMessage },
+      });
       throw new Error(`Failed to get video ${videoId}: ${errorMessage}`);
     }
   }
@@ -60,7 +70,12 @@ export class PandaVideoAdapter implements VideoProviderPort {
       return this.toDomainVideo(pandaVideo);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage, videoId }, "Failed to update video in Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_UPDATE_FAILED",
+        message: "Failed to update video in Panda Video",
+        error,
+        payload: { videoId, error: errorMessage },
+      });
       throw new Error(`Failed to update video ${videoId}: ${errorMessage}`);
     }
   }
@@ -68,10 +83,19 @@ export class PandaVideoAdapter implements VideoProviderPort {
   async deleteVideos(videoIds: string[]): Promise<void> {
     try {
       await this.client.deleteVideos(videoIds);
-      logger.info({ videoIds }, "Videos deleted from Panda Video");
+      logger.info({
+        type: "PANDA_VIDEO_DELETED",
+        message: "Videos deleted from Panda Video",
+        payload: { videoIds },
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage, videoIds }, "Failed to delete videos from Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_DELETE_FAILED",
+        message: "Failed to delete videos from Panda Video",
+        error,
+        payload: { videoIds, error: errorMessage },
+      });
       throw new Error(`Failed to delete videos: ${errorMessage}`);
     }
   }
@@ -79,10 +103,19 @@ export class PandaVideoAdapter implements VideoProviderPort {
   async recoverVideos(videoIds: string[]): Promise<void> {
     try {
       await this.client.recoverVideos(videoIds);
-      logger.info({ videoIds }, "Videos recovered from Panda Video");
+      logger.info({
+        type: "PANDA_VIDEO_RECOVERED",
+        message: "Videos recovered from Panda Video",
+        payload: { videoIds },
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage, videoIds }, "Failed to recover videos from Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_RECOVER_FAILED",
+        message: "Failed to recover videos from Panda Video",
+        error,
+        payload: { videoIds, error: errorMessage },
+      });
       throw new Error(`Failed to recover videos: ${errorMessage}`);
     }
   }
@@ -93,7 +126,12 @@ export class PandaVideoAdapter implements VideoProviderPort {
       return pandaThumbnails.map((t) => this.toDomainThumbnail(t));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage, videoId }, "Failed to get thumbnails from Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_THUMBNAILS_FAILED",
+        message: "Failed to get thumbnails from Panda Video",
+        error,
+        payload: { videoId, error: errorMessage },
+      });
       throw new Error(`Failed to get thumbnails for video ${videoId}: ${errorMessage}`);
     }
   }
@@ -105,7 +143,12 @@ export class PandaVideoAdapter implements VideoProviderPort {
       return this.toDomainThumbnail(pandaThumbnail);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage, videoId }, "Failed to upload thumbnail to Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_THUMBNAIL_UPLOAD_FAILED",
+        message: "Failed to upload thumbnail to Panda Video",
+        error,
+        payload: { videoId, error: errorMessage },
+      });
       throw new Error(`Failed to upload thumbnail for video ${videoId}: ${errorMessage}`);
     }
   }
@@ -113,10 +156,19 @@ export class PandaVideoAdapter implements VideoProviderPort {
   async deleteThumbnail(videoId: string, thumbnailId: string): Promise<void> {
     try {
       await this.client.deleteThumbnail(videoId, thumbnailId);
-      logger.info({ videoId, thumbnailId }, "Thumbnail deleted from Panda Video");
+      logger.info({
+        type: "PANDA_VIDEO_THUMBNAIL_DELETED",
+        message: "Thumbnail deleted from Panda Video",
+        payload: { videoId, thumbnailId },
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage, videoId, thumbnailId }, "Failed to delete thumbnail from Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_THUMBNAIL_DELETE_FAILED",
+        message: "Failed to delete thumbnail from Panda Video",
+        error,
+        payload: { videoId, thumbnailId, error: errorMessage },
+      });
       throw new Error(`Failed to delete thumbnail ${thumbnailId}: ${errorMessage}`);
     }
   }
@@ -127,7 +179,12 @@ export class PandaVideoAdapter implements VideoProviderPort {
       return pandaFolders.map((f) => this.toDomainFolder(f));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage }, "Failed to list folders from Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_LIST_FOLDERS_FAILED",
+        message: "Failed to list folders from Panda Video",
+        error,
+        payload: { error: errorMessage },
+      });
       throw new Error(`Failed to list folders: ${errorMessage}`);
     }
   }
@@ -138,7 +195,12 @@ export class PandaVideoAdapter implements VideoProviderPort {
       return this.toDomainFolder(pandaFolder);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage, name, parentId }, "Failed to create folder in Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_CREATE_FOLDER_FAILED",
+        message: "Failed to create folder in Panda Video",
+        error,
+        payload: { name, parentId, error: errorMessage },
+      });
       throw new Error(`Failed to create folder: ${errorMessage}`);
     }
   }
@@ -151,7 +213,12 @@ export class PandaVideoAdapter implements VideoProviderPort {
       return `https://player.pandavideo.com.br/${video.video_id}`;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error: errorMessage, videoId }, "Failed to get playback URL from Panda Video");
+      logger.error({
+        type: "PANDA_VIDEO_PLAYBACK_URL_FAILED",
+        message: "Failed to get playback URL from Panda Video",
+        error,
+        payload: { videoId, error: errorMessage },
+      });
       throw new Error(`Failed to get playback URL for video ${videoId}: ${errorMessage}`);
     }
   }

@@ -137,7 +137,11 @@ export class AuthService {
       await this.checkLock(data.email, ip);
       const user = await prisma.user.findUnique({ where: { email: data.email } });
       if (!user) {
-        logger.warn({ email: data.email }, 'Login failed: user not found');
+        logger.warn({
+          type: 'AUTH_LOGIN_USER_NOT_FOUND',
+          message: 'Login failed: user not found',
+          payload: { email: data.email },
+        });
         await this.recordFailure(data.email, ip);
         span.addEvent('auth.login.failed');
         throw new Error('Invalid credentials');
@@ -145,14 +149,22 @@ export class AuthService {
 
       const valid = await bcrypt.compare(data.password, user.passwordHash);
       if (!valid) {
-        logger.warn({ email: data.email }, 'Login failed: invalid password');
+        logger.warn({
+          type: 'AUTH_LOGIN_INVALID_PASSWORD',
+          message: 'Login failed: invalid password',
+          payload: { email: data.email },
+        });
         await this.recordFailure(data.email, ip);
         span.addEvent('auth.login.failed');
         throw new Error('Invalid credentials');
       }
       await this.recordSuccess(data.email, ip);
       const tokens = await this.issueTokens(user.id, user.roles);
-      logger.info({ email: data.email, userId: user.id }, 'Login successful');
+      logger.info({
+        type: 'AUTH_LOGIN_SUCCESS',
+        message: 'Login successful',
+        payload: { email: data.email, userId: user.id },
+      });
       span.addEvent('auth.login.success');
       return tokens;
     } finally {

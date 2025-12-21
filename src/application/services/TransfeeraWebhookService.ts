@@ -142,7 +142,12 @@ export class TransfeeraWebhookService {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error"
-      logger.error({ err: msg, webhookId }, "Failed to test webhook")
+      logger.error({
+        type: "TRANSFEERA_WEBHOOK_TEST_FAILED",
+        message: "Failed to test webhook",
+        payload: { webhookId },
+        error: err,
+      })
       return {
         success: false,
         durationMs: Date.now() - started,

@@ -23,18 +23,28 @@ export class WithdrawalConsumer implements EventHandler {
     const parsed = event as { payload?: { withdrawalId?: string } };
     const withdrawalId = parsed.payload?.withdrawalId;
     if (!withdrawalId) {
-      logger.warn({ event }, "withdrawal event without withdrawalId");
+      logger.warn({
+        type: "WITHDRAWAL_MISSING_ID",
+        message: "withdrawal event without withdrawalId",
+        payload: { event },
+      });
       return;
     }
 
     try {
       await this.processWithdrawal.execute({ withdrawalId });
-      logger.info({ withdrawalId }, "Processed withdrawal event");
+      logger.info({
+        type: "WITHDRAWAL_PROCESSED",
+        message: "Processed withdrawal event",
+        payload: { withdrawalId },
+      });
     } catch (error) {
-      logger.error(
-        { error, withdrawalId },
-        "Failed to process withdrawal event"
-      );
+      logger.error({
+        type: "WITHDRAWAL_PROCESS_FAILED",
+        message: "Failed to process withdrawal event",
+        error,
+        payload: { withdrawalId },
+      });
     }
   }
 }

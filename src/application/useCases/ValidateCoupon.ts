@@ -77,16 +77,17 @@ export class ValidateCoupon {
     const discountAmountCents = coupon.calculateDiscount(input.originalAmountCents);
     const finalAmountCents = Math.max(0, input.originalAmountCents - discountAmountCents);
 
-    logger.info(
-      {
+    logger.info({
+      type: "COUPON_VALIDATED",
+      message: "Coupon validated",
+      payload: {
         useCase: "ValidateCoupon",
         code: input.code,
         merchantId: input.merchantId,
         valid: true,
         discountAmountCents,
       },
-      "Coupon validated"
-    );
+    });
 
     return {
       valid: true,
