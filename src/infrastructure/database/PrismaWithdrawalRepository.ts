@@ -2,9 +2,24 @@ import { prisma } from "./prismaClient";
 import {
   WithdrawalRecord,
   WithdrawalRepositoryPort,
+  WithdrawalListParams,
+  WithdrawalListResult,
 } from "../../ports/WithdrawalRepositoryPort";
 
-const mapWithdrawal = (withdrawal: any): WithdrawalRecord => ({
+const mapWithdrawal = (withdrawal: {
+  id: string;
+  userId: string;
+  amountCents: number;
+  feeCents: number;
+  totalDebitedCents: number;
+  status: string;
+  transferaTxId: string | null;
+  failureReason: string | null;
+  idempotencyKey: string;
+  createdAt: Date;
+  processedAt: Date | null;
+  version: number;
+}): WithdrawalRecord => ({
   id: withdrawal.id,
   userId: withdrawal.userId,
   amountCents: withdrawal.amountCents,
@@ -33,6 +48,35 @@ export class PrismaWithdrawalRepository implements WithdrawalRepositoryPort {
       where: { userId_idempotencyKey: { userId, idempotencyKey } },
     });
     return withdrawal ? mapWithdrawal(withdrawal) : null;
+  }
+
+  async findByUserId(params: WithdrawalListParams): Promise<WithdrawalListResult> {
+    const page = params.page ?? 1;
+    const limit = Math.min(params.limit ?? 10, 100);
+    const skip = (page - 1) * limit;
+
+    const where: { userId: string; status?: string } = { userId: params.userId };
+    if (params.status) {
+      where.status = params.status;
+    }
+
+    const [withdrawals, total] = await Promise.all([
+      prisma.withdrawal.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.withdrawal.count({ where }),
+    ]);
+
+    return {
+      withdrawals: withdrawals.map(mapWithdrawal),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async create(

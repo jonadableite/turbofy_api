@@ -13,10 +13,27 @@ export interface WithdrawalRecord {
   version: number;
 }
 
+export interface WithdrawalListParams {
+  userId: string;
+  page?: number;
+  limit?: number;
+  status?: string;
+}
+
+export interface WithdrawalListResult {
+  withdrawals: WithdrawalRecord[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface WithdrawalRepositoryPort {
   findById(id: string): Promise<WithdrawalRecord | null>;
 
   findByIdempotencyKey(userId: string, idempotencyKey: string): Promise<WithdrawalRecord | null>;
+
+  findByUserId(params: WithdrawalListParams): Promise<WithdrawalListResult>;
 
   create(input: Omit<WithdrawalRecord, "createdAt" | "processedAt" | "transferaTxId" | "failureReason">): Promise<WithdrawalRecord>;
 

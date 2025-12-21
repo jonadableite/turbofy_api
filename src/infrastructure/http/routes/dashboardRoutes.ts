@@ -247,6 +247,21 @@ dashboardRouter.get(
         });
       }
 
+      // Verificar se o merchant existe
+      const merchantExists = await prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: { id: true },
+      });
+
+      if (!merchantExists) {
+        return res.status(404).json({
+          error: {
+            code: 'MERCHANT_NOT_FOUND',
+            message: 'Merchant não encontrado',
+          },
+        });
+      }
+
       const healthData = await prisma.$transaction(async (tx) => {
         const approvedPayments = await tx.charge.aggregate({
           where: {
