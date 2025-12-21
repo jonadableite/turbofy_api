@@ -254,11 +254,13 @@ dashboardRouter.get(
       });
 
       if (!merchantExists) {
-        return res.status(404).json({
-          error: {
-            code: 'MERCHANT_NOT_FOUND',
-            message: 'Merchant não encontrado',
-          },
+        logger.warn({ merchantId }, 'Merchant not found for health check - returning empty data');
+        // Retornar dados vazios ao invés de erro 404
+        return res.json({
+          approvedPayments: 0,
+          refundedPayments: 0,
+          failedPayments: 0,
+          chargebackRate: 0,
         });
       }
 

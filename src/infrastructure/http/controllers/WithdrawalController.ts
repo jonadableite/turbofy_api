@@ -114,30 +114,35 @@ export class WithdrawalController {
       const userId = req.user?.id;
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-      const [user, pixKey, balance] = await Promise.all([
-        prisma.user.findUnique({
-          where: { id: userId },
-          select: {
-            id: true,
-            email: true,
-            document: true,
-            documentType: true,
-            kycStatus: true,
-            merchant: {
-              select: {
-                name: true,
-                tradeName: true,
-              },
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          document: true,
+          documentType: true,
+          kycStatus: true,
+          merchantId: true,
+          merchant: {
+            select: {
+              id: true,
+              name: true,
             },
           },
-        }),
-        pixKeyRepository.findByUserId(userId),
-        getBalance.execute({ userId }),
-      ]);
+        },
+      });
 
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
+
+      // Se não tem merchant, usar dados do usuário
+      const merchantName = user.merchant?.name || user.email.split("@")[0];
+
+      const [pixKey, balance] = await Promise.all([
+        pixKeyRepository.findByUserId(userId),
+        getBalance.execute({ userId }),
+      ]);
 
       return res.json({
         user: {
@@ -146,7 +151,7 @@ export class WithdrawalController {
           document: user.document,
           documentType: user.documentType,
           kycStatus: user.kycStatus,
-          merchantName: user.merchant?.tradeName || user.merchant?.name || null,
+          merchantName,
         },
         pixKey: pixKey
           ? {
@@ -158,8 +163,8 @@ export class WithdrawalController {
         balance,
       });
     } catch (error) {
-      logger.error({ error }, "Error fetching user info for withdrawal");
-      return res.status(400).json({ error: error instanceof Error ? error.message : "Unknown error" });
+      logger.error({ error, userId: req.user?.id }, "Error fetching user info for withdrawal");
+      return res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }
   }
 
