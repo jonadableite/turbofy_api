@@ -9,6 +9,7 @@ Após um pagamento PIX ser confirmado:
 - ❌ **Wallet não era creditada**
 - ❌ **Splits não apareciam no dashboard**
 - ❌ **Saldo disponível permanecia R$ 0,00**
+- ❌ **TurboProgressBar no header mostrava R$ 0,00**
 
 ## Causa Raiz
 
@@ -190,8 +191,41 @@ Após o deploy:
    - Saldo Disponível: R$ 4,95
    - Transação aparece como "Pago"
 
+## Script de Recálculo de Wallets (Pagamentos Históricos)
+
+Para recalcular wallets baseado em pagamentos já processados (antes do deploy):
+
+```bash
+npx ts-node scripts/recalculate-wallets.ts
+```
+
+Este script:
+1. Busca todas as charges PAID
+2. Calcula valor líquido (amountCents - fees)
+3. Cria/atualiza wallets para cada merchant
+4. Cria WalletTransactions para auditoria
+5. **Idempotente**: não credita duas vezes
+
+## Endpoint de Métricas Atualizado
+
+`GET /dashboard/metrics` agora retorna:
+
+```json
+{
+  "totalSales": 495,          // Valor líquido (para TurboProgressBar)
+  "totalGrossSales": 500,     // Valor bruto
+  "totalNetSales": 495,       // Valor líquido
+  "totalTransactions": 1,
+  "wallet": {
+    "totalEarnedCents": 495,
+    "availableBalanceCents": 495,
+    "pendingBalanceCents": 0
+  }
+}
+```
+
 ---
 
 **Data**: 2025-12-22
 **Status**: ✅ Corrigido
-**Impacto**: Crítico - Saldo agora é atualizado corretamente
+**Impacto**: Crítico - Saldo agora é atualizado corretamente, TurboProgressBar mostra valores reais

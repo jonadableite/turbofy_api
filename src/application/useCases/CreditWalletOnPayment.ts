@@ -70,7 +70,28 @@ export class CreditWalletOnPayment {
       };
     }
 
-    // 3. Atualizar wallet (upsert para criar se não existir)
+    // 3. Verificar se já foi creditado (idempotência)
+    const existingTransaction = await prisma.walletTransaction.findFirst({
+      where: {
+        referenceId: chargeId,
+        type: "CREDIT",
+      },
+    });
+
+    if (existingTransaction) {
+      logger.info({
+        type: "WALLET_ALREADY_CREDITED",
+        message: "Wallet already credited for this charge (idempotent)",
+        payload: { chargeId, transactionId: existingTransaction.id },
+      });
+      return {
+        walletCredited: false,
+        amountCreditedCents: 0,
+        merchantId: charge.merchantId,
+      };
+    }
+
+    // 4. Atualizar wallet (upsert para criar se não existir)
     await prisma.$transaction(async (tx) => {
       // Upsert wallet
       const wallet = await tx.wallet.upsert({
@@ -79,13 +100,13 @@ export class CreditWalletOnPayment {
           merchantId: charge.merchantId,
           availableBalanceCents: netAmountCents,
           pendingBalanceCents: 0,
-          totalReceivedCents: netAmountCents,
+          totalEarnedCents: netAmountCents,
         },
         update: {
           availableBalanceCents: {
             increment: netAmountCents,
           },
-          totalReceivedCents: {
+          totalEarnedCents: {
             increment: netAmountCents,
           },
         },
@@ -97,11 +118,11 @@ export class CreditWalletOnPayment {
           id: randomUUID(),
           walletId: wallet.id,
           type: "CREDIT",
+          status: "COMPLETED",
           amountCents: netAmountCents,
-          balanceAfterCents: wallet.availableBalanceCents + netAmountCents,
           description: `Pagamento recebido - Charge ${chargeId}`,
-          referenceType: "CHARGE",
           referenceId: chargeId,
+          processedAt: new Date(),
           metadata: {
             chargeId,
             amountCents: charge.amountCents,
