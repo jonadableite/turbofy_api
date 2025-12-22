@@ -50,6 +50,7 @@ import { productCheckoutRouter } from "./infrastructure/http/routes/productCheck
 import { productsRouter } from "./infrastructure/http/routes/productsRoutes";
 import { reconciliationsRouter } from "./infrastructure/http/routes/reconciliationsRoutes";
 import { rifeiroRouter } from "./infrastructure/http/routes/rifeiroRoutes";
+import { rifeiroSaquesRouter } from "./infrastructure/http/routes/rifeiroSaquesRoutes";
 import { rifeiroWebhookRouter } from "./infrastructure/http/routes/rifeiroWebhookRoutes";
 import { settlementsRouter } from "./infrastructure/http/routes/settlementsRoutes";
 import { studioRouter } from "./infrastructure/http/routes/studioRoutes";
@@ -275,6 +276,7 @@ app.use('/withdrawals', withdrawalRouter);
 app.use('/coupons', couponsRouter);
 app.use('/rifeiro/webhooks', rifeiroWebhookRouter);
 app.use('/rifeiro', rifeiroRouter);
+app.use('/rifeiro/saques', rifeiroSaquesRouter);
 // Producer splits deve vir antes da rota genérica para não ser interceptada
 app.use('/producer/splits', producerSplitsRouter);
 logger.info({

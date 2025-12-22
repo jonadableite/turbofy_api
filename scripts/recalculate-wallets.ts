@@ -10,10 +10,49 @@
  * 4. Cria WalletTransactions para auditoria
  */
 
+// Carregar variáveis de ambiente (permite apontar outro arquivo via ENV_FILE)
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "crypto";
+import * as dotenv from "dotenv";
+import { Pool } from "pg";
 
-const prisma = new PrismaClient();
+dotenv.config({ path: process.env.ENV_FILE ?? ".env" });
+
+const getDatabaseUrlOrThrow = (): string => {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (typeof databaseUrl !== "string" || databaseUrl.trim().length === 0) {
+    throw new Error(
+      "DATABASE_URL não está definida. Configure no .env (ou exporte DATABASE_URL) antes de rodar o script."
+    );
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error("DATABASE_URL inválida (não é uma URL válida).");
+  }
+
+  if (parsed.password.length === 0) {
+    throw new Error(
+      "DATABASE_URL parece não conter senha (password). Verifique se a URL tem usuário:senha@host ou se variáveis referenciadas no .env estão resolvendo corretamente."
+    );
+  }
+
+  // Log seguro (sem senha)
+  // eslint-disable-next-line no-console
+  console.log("🔧 Config DB (sanitizado):", {
+    protocol: parsed.protocol,
+    host: parsed.host,
+    database: parsed.pathname.replace("/", ""),
+    user: parsed.username,
+    hasPassword: parsed.password.length > 0,
+    envFile: process.env.ENV_FILE ?? ".env",
+  });
+
+  return databaseUrl;
+};
 
 interface WalletRecalculation {
   merchantId: string;
@@ -28,8 +67,58 @@ interface WalletRecalculation {
 async function recalculateWallets(): Promise<void> {
   console.log("🔄 Iniciando recálculo de wallets...\n");
 
+  const databaseUrl = getDatabaseUrlOrThrow();
+  const pool = new Pool({ connectionString: databaseUrl });
+  const adapter = new PrismaPg(pool);
+  const prisma = new PrismaClient({ adapter, log: ["error", "warn"] });
+
   try {
-    // 1. Buscar todos os merchants com charges pagas
+    // Teste de conexão (com logs detalhados)
+    await prisma.$connect();
+    console.log("✅ Conexão com o banco de dados estabelecida\n");
+
+    // 1. Backfill de paidAt para charges PAID sem paidAt
+    console.log("📅 Verificando charges sem paidAt...");
+    const chargesWithoutPaidAt = await prisma.charge.findMany({
+      where: {
+        status: "PAID",
+        paidAt: null,
+      },
+      select: { id: true, createdAt: true, updatedAt: true },
+    });
+
+    if (chargesWithoutPaidAt.length > 0) {
+      console.log(`   - Encontradas ${chargesWithoutPaidAt.length} charges PAID sem paidAt`);
+      console.log("   - Buscando PaymentInteractions para obter timestamp real...\n");
+
+      let updatedCount = 0;
+      for (const charge of chargesWithoutPaidAt) {
+        // Buscar PaymentInteraction do tipo CHARGE_PAID para esta charge
+        const interaction = await prisma.paymentInteraction.findFirst({
+          where: {
+            chargeId: charge.id,
+            type: "CHARGE_PAID",
+          },
+          orderBy: { createdAt: "asc" },
+          select: { createdAt: true },
+        });
+
+        // Usar timestamp da interaction ou fallback para updatedAt
+        const paidAt = interaction?.createdAt || charge.updatedAt;
+
+        await prisma.charge.update({
+          where: { id: charge.id },
+          data: { paidAt },
+        });
+        updatedCount++;
+      }
+
+      console.log(`   ✅ paidAt atualizado para ${updatedCount} charges\n`);
+    } else {
+      console.log("   ✅ Todas as charges PAID já têm paidAt\n");
+    }
+
+    // 2. Buscar todos os merchants com charges pagas
     const paidCharges = await prisma.charge.findMany({
       where: { status: "PAID" },
       include: {
@@ -45,7 +134,7 @@ async function recalculateWallets(): Promise<void> {
       return;
     }
 
-    // 2. Agrupar por merchant
+    // 3. Agrupar por merchant
     const merchantData = new Map<string, {
       chargeIds: string[];
       totalGross: number;
@@ -76,7 +165,7 @@ async function recalculateWallets(): Promise<void> {
 
     console.log(`👥 Merchants com charges pagas: ${merchantData.size}\n`);
 
-    // 3. Processar cada merchant
+    // 4. Processar cada merchant
     const results: WalletRecalculation[] = [];
 
     for (const [merchantId, data] of merchantData) {
@@ -190,7 +279,7 @@ async function recalculateWallets(): Promise<void> {
       });
     }
 
-    // 4. Resumo final
+    // 5. Resumo final
     console.log("\n" + "=".repeat(60));
     console.log("📋 RESUMO DO RECÁLCULO");
     console.log("=".repeat(60));
@@ -213,12 +302,21 @@ async function recalculateWallets(): Promise<void> {
     console.log(`   - Wallets atualizadas: ${walletsUpdated}`);
 
     console.log("\n✅ Recálculo concluído com sucesso!");
+    console.log("\n💡 Dica: Execute `pnpm start` ou recarregue o dashboard para ver as mudanças.");
 
   } catch (error) {
     console.error("❌ Erro durante o recálculo:", error);
+    if (error instanceof Error) {
+      console.error("Detalhes do erro:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
+    }
     throw error;
   } finally {
     await prisma.$disconnect();
+    await pool.end();
   }
 }
 
