@@ -65,7 +65,9 @@ const app = express();
 const logger = makeLogger();
 
 // Trust proxy para funcionar corretamente atrás de Cloudflare/NGINX
-app.set('trust proxy', true);
+// Configurar para confiar apenas no primeiro proxy (mais seguro para rate limiting)
+// Isso permite que req.ip funcione corretamente sem permitir bypass do rate limiting
+app.set('trust proxy', 1); // Confiar apenas no primeiro proxy (Cloudflare/NGINX)
 
 // Configurar CORS corretamente para múltiplas origens
 const corsOrigin = process.env.CORS_ORIGIN || "*";

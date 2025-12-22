@@ -36,6 +36,9 @@
 ### Novos Scripts de Diagnóstico
 
 - `npx ts-node scripts/verify-transfeera-webhooks.ts` - Verifica configuração completa
+- `npx ts-node scripts/test-with-webhook-site.ts <url>` - Configura webhook com webhook.site
+- `npx ts-node scripts/simulate-webhook-to-site.ts <url> [charge-id]` - Simula webhook para webhook.site
+- `npx ts-node scripts/test-webhook-flow.ts` - Teste end-to-end completo
 
 ---
 

@@ -27,6 +27,27 @@ import { logger } from "../../logger";
 export const transfeeraWebhookRouter = Router();
 
 /**
+ * GET /webhooks/transfeera
+ * Endpoint para testes da Transfeera (ela pode testar com GET antes de criar o webhook)
+ */
+transfeeraWebhookRouter.get("/", async (req: Request, res: Response) => {
+  logger.info(
+    {
+      method: "GET",
+      userAgent: req.headers["user-agent"],
+      ip: req.ip,
+      tip: "Requisição GET recebida - provavelmente teste da Transfeera",
+    },
+    "Transfeera webhook GET test request"
+  );
+  res.status(200).json({ 
+    status: "ok", 
+    message: "Webhook endpoint is accessible",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
  * GET /webhooks/transfeera/health
  * Endpoint de diagnóstico para verificar se o webhook está acessível
  */
@@ -199,13 +220,71 @@ transfeeraWebhookRouter.post("/", async (req: Request, res: Response) => {
     const webhookConfigRepo = new PrismaTransfeeraWebhookConfigRepository();
     const attemptRepo = new PrismaWebhookAttemptRepository();
     
-    // Em modo de teste, pula a validação completamente para facilitar os testes unitários
-    // Os testes específicos de assinatura alteram NODE_ENV para "production" para testar a validação
-    if (isTestMode) {
+    // Detectar se é um teste da Transfeera (quando ela testa a URL antes de criar o webhook)
+    // A Transfeera envia uma requisição sem assinatura para testar se a URL está acessível
+    // Critérios para detectar teste:
+    // 1. Não tem assinatura E (não tem body válido OU não tem event.id OU não tem account_id)
+    // 2. User-Agent contém "transfeera"
+    // 3. Body vazio ou inválido
+    const userAgent = req.headers["user-agent"] || "";
+    const isTransfeeraUserAgent = userAgent.toLowerCase().includes("transfeera");
+    const hasValidEvent = event && event.id && event.account_id;
+    const hasEmptyBody = !req.body || Object.keys(req.body).length === 0;
+    const isTransfeeraTest = !sigHeader && (!hasValidEvent || hasEmptyBody);
+    
+    // Em modo de teste ou teste da Transfeera, aceitar sem validação
+    if (isTestMode || isTransfeeraTest || isTransfeeraUserAgent) {
+      if (isTransfeeraTest || isTransfeeraUserAgent) {
+        logger.info(
+          {
+            userAgent,
+            ip: req.ip,
+            hasBody: !!req.body,
+            bodyKeys: req.body ? Object.keys(req.body) : [],
+            hasSignature: !!sigHeader,
+            eventId: event?.id,
+            accountId: event?.account_id,
+            hasValidEvent,
+            hasEmptyBody,
+            isTransfeeraTest,
+            isTransfeeraUserAgent,
+            tip: "Esta é uma requisição de teste da Transfeera. Retornando 200 para permitir criação do webhook.",
+          },
+          "Transfeera webhook test request - accepting without signature"
+        );
+        // Retornar 200 para permitir que a Transfeera crie o webhook
+        return res.status(200).json({ 
+          status: "ok", 
+          message: "Webhook endpoint is accessible",
+          timestamp: new Date().toISOString(),
+        });
+      }
       logger.info({}, "Test mode: skipping signature validation");
     } else {
       // Se o secret está configurado no banco, validar assinatura
+      // Mas primeiro, verificar novamente se não é um teste (pode ter sido detectado incorretamente)
       if (!raw || !sigHeader) {
+        // Última verificação: se não tem assinatura e não tem evento válido, pode ser teste
+        const mightBeTest = !hasValidEvent || hasEmptyBody;
+        if (mightBeTest) {
+          logger.info(
+            {
+              hasRaw: !!raw,
+              rawLength: raw ? raw.length : 0,
+              hasSigHeader: !!sigHeader,
+              eventId: event?.id,
+              accountId: event?.account_id,
+              tip: "Sem assinatura e sem evento válido - tratando como teste da Transfeera",
+            },
+            "Transfeera webhook test request (fallback detection) - accepting without signature"
+          );
+          return res.status(200).json({ 
+            status: "ok", 
+            message: "Webhook endpoint is accessible",
+            timestamp: new Date().toISOString(),
+          });
+        }
+        
         logger.warn(
           {
             hasRaw: !!raw,

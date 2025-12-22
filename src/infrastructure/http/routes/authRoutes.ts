@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import rateLimit from "express-rate-limit";
 import {
   AuthService,
   registerSchema,
@@ -15,6 +14,7 @@ import { trace } from "@opentelemetry/api";
 // reCAPTCHA removido
 import { generateCsrfToken } from "../../security/csrf";
 import { authMiddleware } from "../middlewares/authMiddleware";
+import { createSecureRateLimiter } from "../utils/rateLimitHelper";
 
 const authRouter = Router();
 const authService = new AuthService();
@@ -25,12 +25,10 @@ const tracer = trace.getTracer("turbofy-auth");
 const isDevelopment = process.env.NODE_ENV === "development";
 
 // rate limiter: 10 requests / 10 minutes per IP for auth endpoints
-const authLimiter = rateLimit({
+const authLimiter = createSecureRateLimiter({
   windowMs: 10 * 60 * 1000, // 10 minutos
   max: isDevelopment ? 100 : 10, // 100 req/10min em dev, 10 em produção
   message: "Too many auth attempts, please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
   // Skip rate limiting para localhost em desenvolvimento
   skip: (req) => {
     if (isDevelopment) {
@@ -42,12 +40,10 @@ const authLimiter = rateLimit({
 });
 
 // MFA: stricter request rate limiting - mais permissivo em desenvolvimento
-const mfaLimiter = rateLimit({
+const mfaLimiter = createSecureRateLimiter({
   windowMs: 10 * 60 * 1000, // 10 minutos
   max: isDevelopment ? 50 : 5, // 50 req/10min em dev, 5 em produção
   message: "Too many MFA requests, please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
   // Skip rate limiting para localhost em desenvolvimento
   skip: (req) => {
     if (isDevelopment) {
@@ -68,12 +64,10 @@ const mfaVerifySchema = z.object({
 });
 
 // Rate limiter mais permissivo para /auth/me (usado frequentemente)
-const meLimiter = rateLimit({
+const meLimiter = createSecureRateLimiter({
   windowMs: 1 * 60 * 1000, // 1 minuto
   max: isDevelopment ? 100 : 30, // 100 req/min em dev, 30 em produção
   message: "Too many requests, please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
   skip: (req) => {
     if (isDevelopment) {
       const ip = req.ip || req.socket.remoteAddress || "";
