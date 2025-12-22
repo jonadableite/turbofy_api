@@ -34,16 +34,44 @@ export class WebhookDeliveryConsumer implements EventHandler {
 
   async handle(event: unknown): Promise<void> {
     try {
-      const message = event as WebhookDeliveryMessage;
+      // O evento do RabbitMQ tem a estrutura:
+      // { id, type: "webhook.delivery", payload: WebhookDeliveryMessage }
+      // Precisamos extrair o payload que contém os dados reais da delivery
+      const rawEvent = event as {
+        id?: string;
+        type?: string;
+        payload?: WebhookDeliveryMessage;
+      };
 
-      if (!message.deliveryId || !message.webhookId || !message.eventEnvelope) {
+      // Extrair o WebhookDeliveryMessage do payload
+      const message = rawEvent.payload as WebhookDeliveryMessage;
+
+      if (!message || !message.deliveryId || !message.webhookId || !message.eventEnvelope) {
         logger.warn({
           type: "WEBHOOK_DELIVERY_INVALID_MESSAGE",
-          message: "Mensagem de delivery inválida",
-          payload: { event },
+          message: "Mensagem de delivery inválida (faltando campos no payload)",
+          payload: { 
+            event,
+            hasPayload: !!rawEvent.payload,
+            deliveryId: message?.deliveryId,
+            webhookId: message?.webhookId,
+            hasEventEnvelope: !!message?.eventEnvelope,
+            tip: "O evento deve ter a estrutura { payload: { deliveryId, webhookId, eventEnvelope } }",
+          },
         });
         return;
       }
+
+      logger.info({
+        type: "WEBHOOK_DELIVERY_PROCESSING",
+        message: "Processando delivery de webhook",
+        payload: {
+          deliveryId: message.deliveryId,
+          webhookId: message.webhookId,
+          eventId: message.eventEnvelope.id,
+          eventType: message.eventEnvelope.type,
+        },
+      });
 
       // Buscar delivery
       const delivery = await prisma.webhookDelivery.findUnique({

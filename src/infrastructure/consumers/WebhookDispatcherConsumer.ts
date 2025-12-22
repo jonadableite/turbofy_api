@@ -17,16 +17,43 @@ import { logger } from "../logger";
 export class WebhookDispatcherConsumer implements EventHandler {
   async handle(event: unknown): Promise<void> {
     try {
-      const envelope = event as WebhookEventEnvelope;
+      // O evento do RabbitMQ tem a estrutura:
+      // { id, type: "webhook.dispatch", payload: WebhookEventEnvelope }
+      // Precisamos extrair o payload que contém os dados reais do evento
+      const rawEvent = event as {
+        id?: string;
+        type?: string;
+        payload?: WebhookEventEnvelope;
+      };
 
-      if (!envelope.id || !envelope.type || !envelope.merchantId) {
+      // Extrair o WebhookEventEnvelope do payload
+      const envelope = rawEvent.payload as WebhookEventEnvelope;
+
+      if (!envelope || !envelope.id || !envelope.type || !envelope.merchantId) {
         logger.warn({
           type: "WEBHOOK_DISPATCHER_INVALID_EVENT",
-          message: "Evento de webhook inválido (faltando campos obrigatórios)",
-          payload: { event },
+          message: "Evento de webhook inválido (faltando campos obrigatórios no payload)",
+          payload: { 
+            event,
+            hasPayload: !!rawEvent.payload,
+            envelopeId: envelope?.id,
+            envelopeType: envelope?.type,
+            envelopeMerchantId: envelope?.merchantId,
+            tip: "O evento deve ter a estrutura { payload: { id, type, merchantId, data } }",
+          },
         });
         return;
       }
+
+      logger.info({
+        type: "WEBHOOK_DISPATCHER_PROCESSING",
+        message: "Processando evento de webhook",
+        payload: {
+          eventId: envelope.id,
+          eventType: envelope.type,
+          merchantId: envelope.merchantId,
+        },
+      });
 
       // Buscar webhooks ACTIVE do merchant que escutam este evento
       const webhooks = await prisma.webhook.findMany({
