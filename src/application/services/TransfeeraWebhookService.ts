@@ -50,7 +50,84 @@ export class TransfeeraWebhookService {
   async createWebhook(merchantId: string, url: string, objectTypes: string[]): Promise<WebhookConfigDTO> {
     validateWebhookUrl(url)
 
-    const remote = await this.transfeeraClient.createTransfeeraWebhook(url, objectTypes)
+    // Verificar se já existe webhook na Transfeera com os mesmos objectTypes
+    // A Transfeera só permite 1 webhook por conjunto de objectTypes
+    let remote: { id: string; company_id?: string; url: string; object_types: string[]; schema_version?: string; signature_secret: string; deleted_at?: string | null }
+    
+    try {
+      // Tentar criar novo webhook
+      remote = await this.transfeeraClient.createTransfeeraWebhook(url, objectTypes)
+    } catch (error) {
+      // Se erro 400 com mensagem sobre limite de webhooks, tentar atualizar existente
+      if (
+        error instanceof Error &&
+        error.message.includes("You can only have 1 webhook URL per object types")
+      ) {
+        logger.info(
+          {
+            merchantId,
+            url,
+            objectTypes,
+            tip: "Webhook já existe na Transfeera para estes objectTypes. Buscando existente para atualizar.",
+          },
+          "Webhook already exists, attempting to update"
+        )
+
+        // Listar webhooks existentes na Transfeera
+        const existingWebhooks = await this.transfeeraClient.listTransfeeraWebhooks()
+        
+        // Encontrar webhook que corresponde aos objectTypes solicitados
+        // A Transfeera pode ter webhooks com objectTypes diferentes, precisamos encontrar o que corresponde
+        const matchingWebhook = existingWebhooks.find((wh) => {
+          // Verificar se os objectTypes são os mesmos (ordem não importa)
+          const whTypes = (wh.object_types || []).sort()
+          const requestedTypes = objectTypes.sort()
+          return (
+            whTypes.length === requestedTypes.length &&
+            whTypes.every((type, idx) => type === requestedTypes[idx])
+          )
+        })
+
+        if (matchingWebhook) {
+          // Atualizar webhook existente
+          logger.info(
+            {
+              webhookId: matchingWebhook.id,
+              oldUrl: matchingWebhook.url,
+              newUrl: url,
+              objectTypes,
+            },
+            "Updating existing Transfeera webhook"
+          )
+
+          await this.transfeeraClient.updateTransfeeraWebhook(
+            matchingWebhook.id,
+            url,
+            objectTypes
+          )
+
+          // Buscar webhook atualizado (a Transfeera pode retornar dados atualizados)
+          const updatedWebhooks = await this.transfeeraClient.listTransfeeraWebhooks()
+          const updated = updatedWebhooks.find((wh) => wh.id === matchingWebhook.id)
+
+          if (!updated) {
+            throw new Error("Failed to retrieve updated webhook from Transfeera")
+          }
+
+          remote = updated
+        } else {
+          // Não encontrou webhook correspondente, mas Transfeera disse que já existe
+          // Pode ser que os objectTypes sejam diferentes mas conflitantes
+          throw new Error(
+            `Webhook já existe na Transfeera para estes objectTypes, mas não foi possível encontrá-lo para atualizar. ` +
+            `Por favor, delete o webhook existente manualmente na Transfeera ou use objectTypes diferentes.`
+          )
+        }
+      } else {
+        // Outro tipo de erro, propagar
+        throw error
+      }
+    }
 
     // Garantir que todos os campos obrigatórios estejam presentes
     if (!remote.id) {
@@ -66,18 +143,53 @@ export class TransfeeraWebhookService {
       throw new Error("URL do webhook não está disponível")
     }
 
-    const created = await this.repo.create({
-      merchantId,
-      webhookId: remote.id,
-      accountId: remote.company_id || merchantId,
-      url: webhookUrl,
-      objectTypes: remote.object_types ?? objectTypes,
-      signatureSecret: remote.signature_secret,
-      schemaVersion: remote.schema_version ?? "v1",
-      active: !remote.deleted_at,
-    } as CreateTransfeeraWebhookConfigInput)
+    // Verificar se já existe no nosso banco
+    const existingInDb = await this.repo.findByWebhookId(remote.id)
+    
+    if (existingInDb) {
+      // Atualizar registro existente
+      if (existingInDb.merchantId !== merchantId) {
+        throw new Error("Webhook pertence a outro merchant")
+      }
 
-    return mapDto(created)
+      const updated = await this.repo.update(remote.id, {
+        url: webhookUrl,
+        objectTypes: remote.object_types ?? objectTypes,
+        active: !remote.deleted_at,
+      } as UpdateTransfeeraWebhookConfigInput)
+
+      logger.info(
+        {
+          webhookId: remote.id,
+          merchantId,
+        },
+        "Webhook updated in database"
+      )
+
+      return mapDto(updated)
+    } else {
+      // Criar novo registro
+      const created = await this.repo.create({
+        merchantId,
+        webhookId: remote.id,
+        accountId: remote.company_id || merchantId,
+        url: webhookUrl,
+        objectTypes: remote.object_types ?? objectTypes,
+        signatureSecret: remote.signature_secret,
+        schemaVersion: remote.schema_version ?? "v1",
+        active: !remote.deleted_at,
+      } as CreateTransfeeraWebhookConfigInput)
+
+      logger.info(
+        {
+          webhookId: remote.id,
+          merchantId,
+        },
+        "Webhook created in database"
+      )
+
+      return mapDto(created)
+    }
   }
 
   async listWebhooks(merchantId: string): Promise<WebhookConfigDTO[]> {
