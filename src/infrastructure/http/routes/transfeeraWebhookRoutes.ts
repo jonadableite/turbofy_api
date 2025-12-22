@@ -24,6 +24,29 @@ import { PrismaTransfeeraWebhookConfigRepository } from "../../database/reposito
 import { EmailService } from "../../email/EmailService";
 import { logger } from "../../logger";
 
+// Métricas Prometheus para monitoramento de webhooks
+const eventsReceived = new Counter({ 
+  name: "webhook_events_received_total", 
+  help: "Contagem de eventos de webhook recebidos", 
+  labelNames: ["provider", "type"] 
+});
+const eventsProcessed = new Counter({ 
+  name: "webhook_events_processed_total", 
+  help: "Contagem de eventos de webhook processados", 
+  labelNames: ["provider", "type"] 
+});
+const eventsErrors = new Counter({ 
+  name: "webhook_events_errors_total", 
+  help: "Contagem de erros de processamento de webhook", 
+  labelNames: ["provider", "type"] 
+});
+const eventLatency = new Histogram({ 
+  name: "webhook_event_latency_seconds", 
+  help: "Latência do processamento de eventos de webhook", 
+  labelNames: ["provider", "type"], 
+  buckets: [0.01, 0.1, 0.5, 1, 5, 30, 300] 
+});
+
 export const transfeeraWebhookRouter = Router();
 
 /**
@@ -617,23 +640,36 @@ async function handleCashInEvent(data: CashInEventData): Promise<void> {
     );
 
     // Publicar evento charge.paid no RabbitMQ para processamento assíncrono
-    const messaging = MessagingFactory.create();
-    await messaging.publish({
-      id: randomUUID(),
-      type: "charge.paid",
-      timestamp: new Date().toISOString(),
-      version: "v1",
-      traceId: data.txid || data.end2end_id,
-      idempotencyKey: `charge-paid-${charge.id}`,
-      routingKey: "charge.paid",
-      payload: {
-        chargeId: charge.id,
-        merchantId: charge.merchantId,
-        amountCents: charge.amountCents,
-        txid: data.txid,
-        end2endId: data.end2end_id,
-      },
-    });
+    // Não bloquear o processamento se RabbitMQ não estiver disponível (ex: testes)
+    try {
+      const messaging = MessagingFactory.create();
+      await messaging.publish({
+        id: randomUUID(),
+        type: "charge.paid",
+        timestamp: new Date().toISOString(),
+        version: "v1",
+        traceId: data.txid || data.end2end_id,
+        idempotencyKey: `charge-paid-${charge.id}`,
+        routingKey: "charge.paid",
+        payload: {
+          chargeId: charge.id,
+          merchantId: charge.merchantId,
+          amountCents: charge.amountCents,
+          txid: data.txid,
+          end2endId: data.end2end_id,
+        },
+      });
+    } catch (error) {
+      // Log mas não falhar o processamento do webhook se RabbitMQ não estiver disponível
+      logger.warn(
+        {
+          error: error instanceof Error ? error.message : "Unknown error",
+          chargeId: charge.id,
+          tip: "RabbitMQ não disponível - evento charge.paid não foi publicado (não bloqueia o processamento)",
+        },
+        "Failed to publish charge.paid event to RabbitMQ (non-blocking)"
+      );
+    }
   } else {
     logger.warn(
       {
@@ -741,34 +777,48 @@ async function handleChargeReceivableEvent(data: Record<string, unknown>): Promi
       );
 
       // Publicar evento charge.paid no RabbitMQ para processamento assíncrono
+      // Não bloquear o processamento se RabbitMQ não estiver disponível (ex: testes)
       if (status === "paid") {
-        const messaging = MessagingFactory.create();
-        await messaging.publish({
-          id: randomUUID(),
-          type: "charge.paid",
-          timestamp: new Date().toISOString(),
-          version: "v1",
-          traceId: chargeId,
-          idempotencyKey: `charge-paid-${charge.id}`,
-          routingKey: "charge.paid",
-          payload: {
-            chargeId: charge.id,
-            merchantId: charge.merchantId,
+        try {
+          const messaging = MessagingFactory.create();
+          await messaging.publish({
+            id: randomUUID(),
+            type: "charge.paid",
+            timestamp: new Date().toISOString(),
+            version: "v1",
+            traceId: chargeId,
+            idempotencyKey: `charge-paid-${charge.id}`,
+            routingKey: "charge.paid",
+            payload: {
+              chargeId: charge.id,
+              merchantId: charge.merchantId,
             amountCents: charge.amountCents,
           },
         });
+        } catch (error) {
+          logger.warn(
+            {
+              error: error instanceof Error ? error.message : "Unknown error",
+              chargeId: charge.id,
+              tip: "RabbitMQ não disponível - evento charge.paid não foi publicado (não bloqueia o processamento)",
+            },
+            "Failed to publish charge.paid event to RabbitMQ (non-blocking)"
+          );
+        }
       }
 
       // Publicar evento charge.expired no RabbitMQ (para webhooks/outros consumidores)
+      // Não bloquear o processamento se RabbitMQ não estiver disponível (ex: testes)
       if (status === "expired" || status === "cancelled") {
-        const messaging = MessagingFactory.create();
-        await messaging.publish({
-          id: randomUUID(),
-          type: "charge.expired",
-          timestamp: new Date().toISOString(),
-          version: "v1",
-          traceId: chargeId,
-          idempotencyKey: `charge-expired-${charge.id}`,
+        try {
+          const messaging = MessagingFactory.create();
+          await messaging.publish({
+            id: randomUUID(),
+            type: "charge.expired",
+            timestamp: new Date().toISOString(),
+            version: "v1",
+            traceId: chargeId,
+            idempotencyKey: `charge-expired-${charge.id}`,
           routingKey: "charge.expired",
           payload: {
             chargeId: charge.id,
@@ -776,6 +826,16 @@ async function handleChargeReceivableEvent(data: Record<string, unknown>): Promi
             amountCents: charge.amountCents,
           },
         });
+        } catch (error) {
+          logger.warn(
+            {
+              error: error instanceof Error ? error.message : "Unknown error",
+              chargeId: charge.id,
+              tip: "RabbitMQ não disponível - evento charge.expired não foi publicado (não bloqueia o processamento)",
+            },
+            "Failed to publish charge.expired event to RabbitMQ (non-blocking)"
+          );
+        }
       }
     }
   }
@@ -946,7 +1006,3 @@ async function tryCreateEnrollmentForCourse(chargeId: string): Promise<void> {
   }
 }
 
-const eventsReceived = new Counter({ name: "webhook_events_received_total", help: "Contagem de eventos de webhook recebidos", labelNames: ["provider", "type"] });
-const eventsProcessed = new Counter({ name: "webhook_events_processed_total", help: "Contagem de eventos de webhook processados", labelNames: ["provider", "type"] });
-const eventsErrors = new Counter({ name: "webhook_events_errors_total", help: "Contagem de erros de processamento de webhook", labelNames: ["provider", "type"] });
-const eventLatency = new Histogram({ name: "webhook_event_latency_seconds", help: "Latência do processamento de eventos de webhook", labelNames: ["provider", "type"], buckets: [0.01, 0.1, 0.5, 1, 5, 30, 300] });
