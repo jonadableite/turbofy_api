@@ -27,6 +27,8 @@ import { RabbitMQMessagingAdapter } from "./infrastructure/adapters/messaging/Ra
 import { startChargeExpiredConsumer } from "./infrastructure/consumers/ChargeExpiredConsumer";
 import { startChargePaidConsumer } from "./infrastructure/consumers/ChargePaidConsumer";
 import { startDocumentValidationConsumer } from "./infrastructure/consumers/DocumentValidationConsumer";
+import { startWebhookDispatcherConsumer } from "./infrastructure/consumers/WebhookDispatcherConsumer";
+import { startWebhookDeliveryConsumer } from "./infrastructure/consumers/WebhookDeliveryConsumer";
 import { adminRouter } from "./infrastructure/http/routes/adminRoutes";
 import { affiliatesRouter } from "./infrastructure/http/routes/affiliatesRoutes";
 import { apiKeysRouter } from "./infrastructure/http/routes/apiKeysRoutes";
@@ -55,6 +57,7 @@ import { uploadRouter } from "./infrastructure/http/routes/uploadRoutes";
 import { videoRouter } from "./infrastructure/http/routes/videoRoutes";
 import { webhooksRouter } from "./infrastructure/http/routes/webhooksRoutes";
 import { withdrawalRouter } from "./infrastructure/http/routes/withdrawalRoutes";
+import { integrationsWebhooksRouter } from "./infrastructure/http/routes/integrationsWebhooksRoutes";
 import { setupSwagger } from "./infrastructure/http/swagger";
 import makeLogger, { pinoLogger } from "./infrastructure/logger/logger";
 
@@ -246,6 +249,7 @@ app.use('/onboarding', onboardingRouter);
 app.use('/admin', adminRouter);
 app.use('/api-keys', apiKeysRouter);
 app.use('/webhooks', webhooksRouter);
+app.use('/integrations/webhooks', integrationsWebhooksRouter); // Webhooks para integradores (client credentials)
 app.use('/kyc', kycRouter);
 app.use('/pix-key', pixKeyRouter);
 app.use('/balance', balanceRouter);
@@ -324,6 +328,8 @@ const bootstrap = async () => {
     let chargePaidConsumer: Awaited<ReturnType<typeof startChargePaidConsumer>> | null = null;
     let chargeExpiredConsumer: Awaited<ReturnType<typeof startChargeExpiredConsumer>> | null = null;
     let documentValidationConsumer: Awaited<ReturnType<typeof startDocumentValidationConsumer>> | null = null;
+    let webhookDispatcherConsumer: Awaited<ReturnType<typeof startWebhookDispatcherConsumer>> | null = null;
+    let webhookDeliveryConsumer: Awaited<ReturnType<typeof startWebhookDeliveryConsumer>> | null = null;
 
     if (env.NODE_ENV !== "test") {
       try {
@@ -339,6 +345,8 @@ const bootstrap = async () => {
         chargePaidConsumer = await startChargePaidConsumer();
         chargeExpiredConsumer = await startChargeExpiredConsumer();
         documentValidationConsumer = await startDocumentValidationConsumer();
+        webhookDispatcherConsumer = await startWebhookDispatcherConsumer();
+        webhookDeliveryConsumer = await startWebhookDeliveryConsumer();
         logger.info({
           type: "RABBITMQ_CONSUMERS_READY",
           message: "RabbitMQ consumers inicializados",

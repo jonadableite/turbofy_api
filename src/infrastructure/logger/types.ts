@@ -1,9 +1,11 @@
 export interface LogData<T> {
-  type: string;
-  message: string;
-  payload?: T;
+  type?: string;
+  message?: string;
+  payload?: T | Record<string, unknown>;
   error?: unknown;
   file?: string;
+  // Permite campos contextuais adicionais sem quebrar chamadas existentes
+  [key: string]: unknown;
 }
 
 export type LogMethod = {

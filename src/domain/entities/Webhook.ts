@@ -13,6 +13,7 @@ export const WEBHOOK_EVENTS = [
   "charge.created",
   "charge.paid",
   "charge.expired",
+  "webhook.test", // Evento de teste para validar configuração de webhook
 ] as const;
 
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];

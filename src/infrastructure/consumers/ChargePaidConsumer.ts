@@ -38,14 +38,8 @@ export class ChargePaidConsumer implements EventHandler {
       messaging
     );
 
-    const webhookRepository = new PrismaWebhookRepository(prisma);
-    const webhookLogRepository = new PrismaWebhookLogRepository(prisma);
-    const webhookDelivery = new FetchWebhookDeliveryAdapter();
-    this.dispatchWebhooks = new DispatchWebhooks(
-      webhookRepository,
-      webhookLogRepository,
-      webhookDelivery
-    );
+    // DispatchWebhooks agora usa apenas messaging (refatorado para async)
+    this.dispatchWebhooks = new DispatchWebhooks(messaging);
 
     this.chargeRepository = chargeRepository;
   }

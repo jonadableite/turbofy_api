@@ -7,11 +7,8 @@
 
 import { DispatchWebhooks } from "../../application/useCases/DispatchWebhooks";
 import { EventHandler, RabbitMQConsumer } from "../adapters/messaging/RabbitMQConsumer";
-import { FetchWebhookDeliveryAdapter } from "../adapters/webhooks/FetchWebhookDeliveryAdapter";
 import { PrismaChargeRepository } from "../database/PrismaChargeRepository";
-import { prisma } from "../database/prismaClient";
-import { PrismaWebhookLogRepository } from "../database/repositories/PrismaWebhookLogRepository";
-import { PrismaWebhookRepository } from "../database/repositories/PrismaWebhookRepository";
+import { MessagingFactory } from "../adapters/messaging/MessagingFactory";
 import { logger } from "../logger";
 
 export class ChargeExpiredConsumer implements EventHandler {
@@ -21,15 +18,8 @@ export class ChargeExpiredConsumer implements EventHandler {
   constructor() {
     this.chargeRepository = new PrismaChargeRepository();
 
-    const webhookRepository = new PrismaWebhookRepository(prisma);
-    const webhookLogRepository = new PrismaWebhookLogRepository(prisma);
-    const webhookDelivery = new FetchWebhookDeliveryAdapter();
-
-    this.dispatchWebhooks = new DispatchWebhooks(
-      webhookRepository,
-      webhookLogRepository,
-      webhookDelivery
-    );
+    const messaging = MessagingFactory.create();
+    this.dispatchWebhooks = new DispatchWebhooks(messaging);
   }
 
   async handle(event: unknown): Promise<void> {
