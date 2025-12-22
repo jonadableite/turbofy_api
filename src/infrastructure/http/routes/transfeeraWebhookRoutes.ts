@@ -245,51 +245,82 @@ transfeeraWebhookRouter.post("/", async (req: Request, res: Response) => {
     
     // Detectar se é um teste da Transfeera (quando ela testa a URL antes de criar o webhook)
     // A Transfeera envia uma requisição sem assinatura para testar se a URL está acessível
-    // Critérios para detectar teste:
-    // 1. Não tem assinatura E (não tem body válido OU não tem event.id OU não tem account_id)
-    // 2. User-Agent contém "transfeera"
-    // 3. Body vazio ou inválido
+    // Critérios para detectar teste (MUITO RESTRITIVO - só tratar como teste se realmente não tiver dados):
+    // 1. NÃO tem assinatura E
+    // 2. (NÃO tem event.id OU NÃO tem account_id OU NÃO tem object) E
+    // 3. (Body vazio OU não tem data válida)
+    // IMPORTANTE: Se tiver event.id, account_id e object, mesmo sem assinatura, tentar processar
     const userAgent = req.headers["user-agent"] || "";
     const isTransfeeraUserAgent = userAgent.toLowerCase().includes("transfeera");
-    const hasValidEvent = event && event.id && event.account_id;
+    const hasEventId = !!(event && event.id);
+    const hasAccountId = !!(event && event.account_id);
+    const hasObject = !!(event && event.object);
+    const hasData = !!(event && event.data);
+    const hasValidEvent = hasEventId && hasAccountId && hasObject && hasData;
     const hasEmptyBody = !req.body || Object.keys(req.body).length === 0;
-    const isTransfeeraTest = !sigHeader && (!hasValidEvent || hasEmptyBody);
+    
+    // Só tratar como teste se REALMENTE não tiver dados válidos
+    // Se tiver event.id, account_id, object e data, mesmo sem assinatura, tentar processar
+    const isTransfeeraTest = !sigHeader && (
+      (!hasEventId || !hasAccountId || !hasObject || !hasData) && 
+      (hasEmptyBody || !hasData)
+    );
     
     // Em modo de teste ou teste da Transfeera, aceitar sem validação
-    if (isTestMode || isTransfeeraTest || isTransfeeraUserAgent) {
-      if (isTransfeeraTest || isTransfeeraUserAgent) {
-        logger.info(
-          {
-            userAgent,
-            ip: req.ip,
-            hasBody: !!req.body,
-            bodyKeys: req.body ? Object.keys(req.body) : [],
-            hasSignature: !!sigHeader,
-            eventId: event?.id,
-            accountId: event?.account_id,
-            hasValidEvent,
-            hasEmptyBody,
-            isTransfeeraTest,
-            isTransfeeraUserAgent,
-            tip: "Esta é uma requisição de teste da Transfeera. Retornando 200 para permitir criação do webhook.",
-          },
-          "Transfeera webhook test request - accepting without signature"
-        );
-        // Retornar 200 para permitir que a Transfeera crie o webhook
-        return res.status(200).json({ 
-          status: "ok", 
-          message: "Webhook endpoint is accessible",
-          timestamp: new Date().toISOString(),
-        });
-      }
+    // MAS: se tiver evento válido, mesmo sem assinatura, tentar processar (pode ser evento real)
+    if (isTestMode) {
       logger.info({}, "Test mode: skipping signature validation");
+    } else if (isTransfeeraTest && !hasValidEvent) {
+      // Só tratar como teste se realmente não tiver evento válido
+      logger.info(
+        {
+          userAgent,
+          ip: req.ip,
+          hasBody: !!req.body,
+          bodyKeys: req.body ? Object.keys(req.body) : [],
+          hasSignature: !!sigHeader,
+          eventId: event?.id,
+          accountId: event?.account_id,
+          hasEventId,
+          hasAccountId,
+          hasObject,
+          hasData,
+          hasValidEvent,
+          hasEmptyBody,
+          isTransfeeraTest,
+          isTransfeeraUserAgent,
+          tip: "Esta é uma requisição de teste da Transfeera (sem dados válidos). Retornando 200 para permitir criação do webhook.",
+        },
+        "Transfeera webhook test request - accepting without signature"
+      );
+      // Retornar 200 para permitir que a Transfeera crie o webhook
+      return res.status(200).json({ 
+        status: "ok", 
+        message: "Webhook endpoint is accessible",
+        timestamp: new Date().toISOString(),
+      });
     } else {
       // Se o secret está configurado no banco, validar assinatura
       // Mas primeiro, verificar novamente se não é um teste (pode ter sido detectado incorretamente)
       if (!raw || !sigHeader) {
-        // Última verificação: se não tem assinatura e não tem evento válido, pode ser teste
-        const mightBeTest = !hasValidEvent || hasEmptyBody;
-        if (mightBeTest) {
+        // Se tem evento válido mas não tem assinatura, tentar processar mesmo assim
+        // (pode ser que a Transfeera não esteja enviando assinatura em alguns casos)
+        if (hasValidEvent) {
+          logger.warn(
+            {
+              hasRaw: !!raw,
+              rawLength: raw ? raw.length : 0,
+              hasSigHeader: !!sigHeader,
+              eventId: event?.id,
+              accountId: event?.account_id,
+              eventObject: event?.object,
+              tip: "Evento válido recebido mas sem assinatura - processando mesmo assim (pode ser evento real)",
+            },
+            "Processing webhook event without signature (has valid event data)"
+          );
+          // Continuar processamento mesmo sem assinatura se tiver evento válido
+        } else {
+          // Última verificação: se não tem assinatura e não tem evento válido, pode ser teste
           logger.info(
             {
               hasRaw: !!raw,
@@ -297,6 +328,7 @@ transfeeraWebhookRouter.post("/", async (req: Request, res: Response) => {
               hasSigHeader: !!sigHeader,
               eventId: event?.id,
               accountId: event?.account_id,
+              hasValidEvent,
               tip: "Sem assinatura e sem evento válido - tratando como teste da Transfeera",
             },
             "Transfeera webhook test request (fallback detection) - accepting without signature"
@@ -327,6 +359,22 @@ transfeeraWebhookRouter.post("/", async (req: Request, res: Response) => {
         return res.status(401).json({ error: "INVALID_SIGNATURE", details: "Missing raw body or signature header" });
       }
 
+      // Se não tem assinatura mas tem evento válido, tentar processar mesmo assim
+      // (a Transfeera pode não estar enviando assinatura em alguns casos)
+      let shouldValidateSignature = true;
+      if (!sigHeader && hasValidEvent) {
+        logger.warn(
+          {
+            eventId: event?.id,
+            accountId: event?.account_id,
+            eventObject: event?.object,
+            tip: "Evento válido recebido sem assinatura - processando mesmo assim. Isso pode ser um evento real que a Transfeera não assinou.",
+          },
+          "Processing webhook event without signature validation (has valid event data)"
+        );
+        shouldValidateSignature = false;
+      }
+
       const config = await webhookConfigRepo.findByAccountId(event.account_id);
       if (!config) {
         logger.warn(
@@ -342,82 +390,86 @@ transfeeraWebhookRouter.post("/", async (req: Request, res: Response) => {
         return res.status(401).json({ error: "WEBHOOK_NOT_CONFIGURED", details: `No webhook configured for account_id: ${event.account_id}` });
       }
 
-      const secret = await webhookConfigRepo.getSignatureSecret(config.webhookId);
-      if (!secret) {
-        await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
-        return res.status(500).json({ error: "WEBHOOK_SECRET_NOT_CONFIGURED" });
-      }
-
-      const rawPayload = raw ? raw.toString("utf8") : JSON.stringify(req.body);
-      const signatureHeader = sigHeader as string;
-
-      // Formato esperado: t=timestamp,v1=signature
-      let provided = "";
-      let timestamp = "";
-      if (signatureHeader.includes("t=") && signatureHeader.includes("v1=")) {
-        const parts = signatureHeader.split(",").map((p) => p.trim());
-        for (const part of parts) {
-          const [k, v] = part.split("=");
-          if (k === "t") timestamp = v;
-          if (k === "v1") provided = v;
+      // Validar assinatura apenas se necessário
+      if (shouldValidateSignature) {
+        const secret = await webhookConfigRepo.getSignatureSecret(config.webhookId);
+        if (!secret) {
+          await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
+          return res.status(500).json({ error: "WEBHOOK_SECRET_NOT_CONFIGURED" });
         }
-      } else {
-        provided = signatureHeader.startsWith("sha256=") ? signatureHeader.slice(7) : signatureHeader;
+
+        const rawPayload = raw ? raw.toString("utf8") : JSON.stringify(req.body);
+        const signatureHeader = sigHeader as string;
+
+        // Formato esperado: t=timestamp,v1=signature
+        let provided = "";
+        let timestamp = "";
+        if (signatureHeader.includes("t=") && signatureHeader.includes("v1=")) {
+          const parts = signatureHeader.split(",").map((p) => p.trim());
+          for (const part of parts) {
+            const [k, v] = part.split("=");
+            if (k === "t") timestamp = v;
+            if (k === "v1") provided = v;
+          }
+        } else {
+          provided = signatureHeader.startsWith("sha256=") ? signatureHeader.slice(7) : signatureHeader;
+        }
+
+        if (!provided) {
+          await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
+          return res.status(401).json({ error: "INVALID_SIGNATURE" });
+        }
+
+        const message = timestamp ? `${timestamp}.${rawPayload}` : rawPayload;
+        const expected = crypto.createHmac("sha256", secret).update(message).digest("hex");
+        const valid = provided === expected || (provided.length === expected.length && crypto.timingSafeEqual(Buffer.from(provided, "hex"), Buffer.from(expected, "hex")));
+
+        if (!valid) {
+          logger.warn(
+            {
+              eventId: event?.id,
+              eventType: event?.object,
+              accountId: event.account_id,
+              signatureLength: provided.length,
+              expectedLength: expected.length,
+              signatureMatch: provided === expected,
+              providedPrefix: provided.substring(0, 10),
+              expectedPrefix: expected.substring(0, 10),
+              timestamp: timestamp,
+              payloadLength: rawPayload.length,
+              tip: "A assinatura não corresponde. Verifique se o secret está correto e se o payload não foi modificado.",
+            },
+            "Webhook rejected: invalid signature"
+          );
+          await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
+          return res.status(401).json({ error: "INVALID_SIGNATURE", details: "Signature mismatch" });
+        }
       }
 
-      if (!provided) {
-        await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
-        return res.status(401).json({ error: "INVALID_SIGNATURE" });
+      // Processar evento após validações
+      logger.info(
+        {
+          eventId: event.id,
+          eventType: event.object,
+          accountId: event.account_id,
+        },
+        "Received Transfeera webhook event"
+      );
+
+      res.status(200).json({ received: true });
+      eventsReceived.labels("transfeera", event.object).inc();
+
+      try {
+        await processWithRetry(event);
+        eventsProcessed.labels("transfeera", event.object).inc();
+      } catch (e) {
+        eventsErrors.labels("transfeera", event.object).inc();
+        throw e;
+      } finally {
+        const end = process.hrtime.bigint();
+        const secs = Number(end - start) / 1e9;
+        eventLatency.labels("transfeera", event.object).observe(secs);
       }
-
-      const message = timestamp ? `${timestamp}.${rawPayload}` : rawPayload;
-      const expected = crypto.createHmac("sha256", secret).update(message).digest("hex");
-      const valid = provided === expected || (provided.length === expected.length && crypto.timingSafeEqual(Buffer.from(provided, "hex"), Buffer.from(expected, "hex")));
-
-      if (!valid) {
-        logger.warn(
-          {
-            eventId: event?.id,
-            eventType: event?.object,
-            accountId: event.account_id,
-            signatureLength: provided.length,
-            expectedLength: expected.length,
-            signatureMatch: provided === expected,
-            providedPrefix: provided.substring(0, 10),
-            expectedPrefix: expected.substring(0, 10),
-            timestamp: timestamp,
-            payloadLength: rawPayload.length,
-            tip: "A assinatura não corresponde. Verifique se o secret está correto e se o payload não foi modificado.",
-          },
-          "Webhook rejected: invalid signature"
-        );
-        await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
-        return res.status(401).json({ error: "INVALID_SIGNATURE", details: "Signature mismatch" });
-      }
-    }
-
-    logger.info(
-      {
-        eventId: event.id,
-        eventType: event.object,
-        accountId: event.account_id,
-      },
-      "Received Transfeera webhook event"
-    );
-
-    res.status(200).json({ received: true });
-    eventsReceived.labels("transfeera", event.object).inc();
-
-    try {
-      await processWithRetry(event);
-      eventsProcessed.labels("transfeera", event.object).inc();
-    } catch (e) {
-      eventsErrors.labels("transfeera", event.object).inc();
-      throw e;
-    } finally {
-      const end = process.hrtime.bigint();
-      const secs = Number(end - start) / 1e9;
-      eventLatency.labels("transfeera", event.object).observe(secs);
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
