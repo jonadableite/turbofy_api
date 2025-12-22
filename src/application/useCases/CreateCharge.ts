@@ -4,18 +4,18 @@
 // 🧪 TESTABILITY: Pure class, collaborators mocked in unit tests
 // 🔄 EXTENSIBILITY: Easy to add new payment methods (Pix, Boleto, CreditCard, etc.)
 
+import { randomUUID } from "crypto";
 import { Charge, ChargeMethod, ChargeStatus } from "../../domain/entities/Charge";
 import { ChargeSplit } from "../../domain/entities/ChargeSplit";
 import { Fee } from "../../domain/entities/Fee";
-import { ChargeRepository } from "../../ports/ChargeRepository";
-import { PaymentProviderPort } from "../../ports/PaymentProviderPort";
-import { MessagingPort } from "../../ports/MessagingPort";
-import { randomUUID } from "crypto";
-import { logger } from "../../infrastructure/logger";
-import { PaymentInteractionRepository } from "../../ports/repositories/PaymentInteractionRepository";
 import { PaymentInteraction, PaymentInteractionType } from "../../domain/entities/PaymentInteraction";
-import { RifeiroSplitCalculator } from "../services/RifeiroSplitCalculator";
 import { prisma } from "../../infrastructure/database/prismaClient";
+import { logger } from "../../infrastructure/logger";
+import { ChargeRepository } from "../../ports/ChargeRepository";
+import { MessagingPort } from "../../ports/MessagingPort";
+import { PaymentProviderPort } from "../../ports/PaymentProviderPort";
+import { PaymentInteractionRepository } from "../../ports/repositories/PaymentInteractionRepository";
+import { RifeiroSplitCalculator } from "../services/RifeiroSplitCalculator";
 
 interface CreateChargeInput {
   idempotencyKey: string;
@@ -215,7 +215,7 @@ export class CreateCharge {
         description: persisted.description,
         expiresAt: persisted.expiresAt ?? undefined,
       });
-      persisted = persisted.withPixData(pixData.qrCode, pixData.copyPaste);
+      persisted = persisted.withPixData(pixData.qrCode, pixData.copyPaste, pixData.txid);
 
       await this.paymentInteractionRepository.create(
         PaymentInteraction.create({

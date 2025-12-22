@@ -14,6 +14,7 @@ import { ChargeStatus } from "../../../domain/entities/Charge";
 import { PaymentInteraction, PaymentInteractionType } from "../../../domain/entities/PaymentInteraction";
 import { MessagingFactory } from "../../adapters/messaging/MessagingFactory";
 import { PrismaChargeRepository } from "../../database/PrismaChargeRepository";
+import { prisma } from "../../database/prismaClient";
 import { PrismaSettlementRepository } from "../../database/PrismaSettlementRepository";
 import { PrismaWebhookAttemptRepository } from "../../database/PrismaWebhookAttemptRepository";
 import { PrismaCourseRepository } from "../../database/repositories/PrismaCourseRepository";
@@ -284,17 +285,82 @@ async function handleCashInEvent(data: CashInEventData): Promise<void> {
   const chargeRepository = new PrismaChargeRepository();
   const paymentInteractionRepository = new PrismaPaymentInteractionRepository();
   
-  // Tentar encontrar cobrança por integration_id (que pode ser nosso externalRef ou merchantId)
-  // ou por txid se disponível
+  // Estratégia de matching melhorada:
+  // 1. Tentar por txid primeiro (mais confiável, único por cobrança)
+  // 2. Se não encontrar, tentar por externalRef (se o integrador passou)
+  // 3. Se ainda não encontrar, tentar buscar charges recentes do merchantId e fazer matching por valor
   let charge = null;
   
-  if (data.integration_id) {
-    charge = await chargeRepository.findByExternalRef(data.integration_id);
+  // 1. Tentar por txid primeiro (mais confiável)
+  if (data.txid) {
+    charge = await chargeRepository.findByTxid(data.txid);
+    if (charge) {
+      logger.info(
+        {
+          chargeId: charge.id,
+          txid: data.txid,
+        },
+        "Charge found by txid"
+      );
+    }
   }
   
-  // Se não encontrou por integration_id, tentar buscar por txid no metadata
-  if (!charge && data.txid) {
-    charge = await chargeRepository.findByTxid(data.txid);
+  // 2. Se não encontrou por txid, tentar por externalRef (integration_id pode ser externalRef)
+  if (!charge && data.integration_id) {
+    charge = await chargeRepository.findByExternalRef(data.integration_id);
+    if (charge) {
+      logger.info(
+        {
+          chargeId: charge.id,
+          integrationId: data.integration_id,
+        },
+        "Charge found by externalRef (integration_id)"
+      );
+    }
+  }
+  
+  // 3. Fallback: buscar charges recentes do merchantId e fazer matching por valor
+  // Isso é necessário porque a Transfeera pode enviar integration_id = merchantId
+  // quando o integrador não passou externalRef
+  if (!charge && data.integration_id && data.value) {
+    const amountCents = Math.round(data.value * 100); // Converter reais para centavos
+    const recentCharges = await prisma.charge.findMany({
+      where: {
+        merchantId: data.integration_id, // Pode ser merchantId se não for externalRef
+        amountCents,
+        status: "PENDING",
+        method: "PIX",
+        createdAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Últimos 7 dias
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+    
+    // Se encontrou apenas uma charge com valor exato, usar ela
+    if (recentCharges.length === 1) {
+      charge = await chargeRepository.findById(recentCharges[0].id);
+      if (charge) {
+        logger.info(
+          {
+            chargeId: charge.id,
+            integrationId: data.integration_id,
+            amountCents,
+          },
+          "Charge found by merchantId + amountCents fallback"
+        );
+      }
+    } else if (recentCharges.length > 1) {
+      logger.warn(
+        {
+          integrationId: data.integration_id,
+          amountCents,
+          foundCount: recentCharges.length,
+        },
+        "Multiple charges found with same merchantId and amount - cannot auto-match"
+      );
+    }
   }
   
   if (charge) {

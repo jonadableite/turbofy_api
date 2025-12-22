@@ -21,7 +21,7 @@ export class BspayPaymentProviderAdapter implements PaymentProviderPort {
     const token = await this.ensureToken()
     const payload = { amount: input.amountCents / 100, external_id: input.merchantId, payer: {}, postbackUrl: undefined }
     const res = await this.client.createPixQrcode(token, payload)
-    return { qrCode: res.qrCode, copyPaste: res.copyPaste, expiresAt: res.expiresAt }
+    return { qrCode: res.qrCode, copyPaste: res.copyPaste, expiresAt: res.expiresAt, txid: res.txid }
   }
 
   async issueBoletoCharge(_input: BoletoIssueInput): Promise<BoletoIssueOutput> {
