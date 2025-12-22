@@ -52,11 +52,25 @@ export class TransfeeraWebhookService {
 
     const remote = await this.transfeeraClient.createTransfeeraWebhook(url, objectTypes)
 
+    // Garantir que todos os campos obrigatórios estejam presentes
+    if (!remote.id) {
+      throw new Error("Transfeera não retornou webhookId")
+    }
+    if (!remote.signature_secret) {
+      throw new Error("Transfeera não retornou signatureSecret")
+    }
+
+    // Garantir que o url seja sempre definido (usar o original se remote.url não existir)
+    const webhookUrl = remote.url || url
+    if (!webhookUrl) {
+      throw new Error("URL do webhook não está disponível")
+    }
+
     const created = await this.repo.create({
       merchantId,
       webhookId: remote.id,
       accountId: remote.company_id || merchantId,
-      url: remote.url,
+      url: webhookUrl,
       objectTypes: remote.object_types ?? objectTypes,
       signatureSecret: remote.signature_secret,
       schemaVersion: remote.schema_version ?? "v1",

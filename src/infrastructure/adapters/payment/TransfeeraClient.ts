@@ -2007,11 +2007,59 @@ export class TransfeeraClient {
   // =====================================================
 
   async createTransfeeraWebhook(url: string, objectTypes: string[]): Promise<TransfeeraWebhook> {
-    const response = await this.axiosInstance.post<TransfeeraWebhook>("/webhook", {
-      url,
-      object_types: objectTypes,
-    });
-    return response.data;
+    try {
+      const response = await this.axiosInstance.post<TransfeeraWebhook>("/webhook", {
+        url,
+        object_types: objectTypes,
+      });
+      
+      // Validar que a resposta contém os campos obrigatórios
+      if (!response.data.id) {
+        throw new PaymentProviderError({
+          statusCode: 500,
+          code: "TRANSFEERA_INVALID_RESPONSE",
+          message: "Transfeera não retornou webhookId",
+        });
+      }
+      if (!response.data.signature_secret) {
+        throw new PaymentProviderError({
+          statusCode: 500,
+          code: "TRANSFEERA_INVALID_RESPONSE",
+          message: "Transfeera não retornou signatureSecret",
+        });
+      }
+      if (!response.data.url) {
+        // Se não retornou URL, usar a que foi enviada
+        response.data.url = url;
+      }
+      
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        const status = error.response.status;
+        const data = error.response.data as any;
+        const message = data?.message || data?.error || error.message;
+        
+        logger.error(
+          {
+            type: "TRANSFEERA_WEBHOOK_CREATE_FAILED",
+            status,
+            message,
+            url,
+            objectTypes,
+            responseData: data,
+          },
+          "Failed to create webhook in Transfeera"
+        );
+        
+        throw new PaymentProviderError({
+          statusCode: status,
+          code: "TRANSFEERA_WEBHOOK_CREATE_FAILED",
+          message: `Transfeera retornou ${status}: ${message}`,
+        });
+      }
+      throw error;
+    }
   }
 
   async listTransfeeraWebhooks(): Promise<TransfeeraWebhook[]> {
