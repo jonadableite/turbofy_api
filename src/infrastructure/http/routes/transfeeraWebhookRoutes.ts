@@ -27,6 +27,83 @@ import { logger } from "../../logger";
 export const transfeeraWebhookRouter = Router();
 
 /**
+ * GET /webhooks/transfeera/health
+ * Endpoint de diagnóstico para verificar se o webhook está acessível
+ */
+transfeeraWebhookRouter.get("/health", async (_req: Request, res: Response) => {
+  res.status(200).json({ 
+    status: "ok", 
+    message: "Turbofy Transfeera Webhook Endpoint",
+    timestamp: new Date().toISOString(),
+    version: "v1",
+    expectedHeaders: ["Transfeera-Signature"],
+    signatureFormat: "t=<timestamp>,v1=<hmac_sha256>",
+  });
+});
+
+/**
+ * GET /webhooks/transfeera/status
+ * Endpoint para verificar a configuração de webhooks da Transfeera
+ * (requer autenticação - apenas para diagnóstico)
+ */
+transfeeraWebhookRouter.get("/status", async (req: Request, res: Response) => {
+  try {
+    const webhookConfigRepo = new PrismaTransfeeraWebhookConfigRepository();
+    const attemptRepo = new PrismaWebhookAttemptRepository();
+    
+    // Buscar últimas tentativas de webhook
+    const recentAttempts = await prisma.webhookAttempt.findMany({
+      where: { provider: "transfeera" },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+    
+    // Buscar configurações de webhook
+    const configs = await prisma.transfeeraWebhookConfig.findMany({
+      select: {
+        id: true,
+        merchantId: true,
+        webhookId: true,
+        accountId: true,
+        url: true,
+        objectTypes: true,
+        active: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+    
+    res.status(200).json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      configs: configs.map(c => ({
+        ...c,
+        hasSecret: true, // Não expor o secret
+      })),
+      recentAttempts: recentAttempts.map(a => ({
+        id: a.id,
+        eventId: a.eventId,
+        type: a.type,
+        status: a.status,
+        signatureValid: a.signatureValid,
+        errorMessage: a.errorMessage,
+        createdAt: a.createdAt,
+      })),
+      tips: [
+        "Certifique-se de que a URL do webhook na Transfeera está correta",
+        "O header 'Transfeera-Signature' deve estar presente em todas as requisições",
+        "O account_id do evento deve corresponder a um webhook configurado",
+      ],
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: "INTERNAL_ERROR", message: errorMessage });
+  }
+});
+
+/**
  * Interface para eventos de webhook da Transfeera
  */
 interface TransfeeraWebhookEvent {
@@ -82,12 +159,43 @@ interface TransferEventData {
  * Recebe eventos da Transfeera
  */
 transfeeraWebhookRouter.post("/", async (req: Request, res: Response) => {
+  const start = process.hrtime.bigint();
+  const raw = (req as any).rawBody as Buffer | undefined;
+  
+  // IMPORTANTE: A Transfeera envia o header "Transfeera-Signature" (sem prefixo x-)
+  // Express.js converte automaticamente para lowercase: "transfeera-signature"
+  // Também verificamos variantes para compatibilidade
+  const sigHeader = (
+    req.headers["transfeera-signature"] || // Header oficial da Transfeera (lowercase)
+    req.headers["x-transfeera-signature"] || // Possível variante com prefixo x-
+    req.headers["x-signature"] || // Fallback genérico
+    req.headers["x-hub-signature-256"] // Fallback para outros provedores
+  ) as string | undefined;
+  
+  const event = req.body as TransfeeraWebhookEvent;
+  
+  // Log inicial para debug - captura TODAS as tentativas de webhook
+  // Incluir todos os headers para diagnóstico
+  logger.info(
+    {
+      hasBody: !!req.body,
+      hasRawBody: !!raw,
+      rawBodyLength: raw ? raw.length : 0,
+      hasSignature: !!sigHeader,
+      signatureHeader: sigHeader ? sigHeader.substring(0, 50) + "..." : "missing",
+      allHeaders: Object.keys(req.headers).filter(h => h.includes("signature") || h.includes("transfeera")),
+      bodyKeys: req.body ? Object.keys(req.body) : [],
+      eventId: event?.id,
+      eventType: event?.object,
+      accountId: event?.account_id,
+      ip: req.ip,
+      userAgent: req.headers["user-agent"],
+    },
+    "Webhook Transfeera received (before validation)"
+  );
+
   try {
-    const raw = (req as any).rawBody as Buffer | undefined;
-    const sigHeader = (req.headers["x-transfeera-signature"] || req.headers["x-signature"] || req.headers["x-hub-signature-256"]) as string | undefined;
-    const start = process.hrtime.bigint();
     const isTestMode = process.env.NODE_ENV === "test";
-    const event = req.body as TransfeeraWebhookEvent;
     const webhookConfigRepo = new PrismaTransfeeraWebhookConfigRepository();
     const attemptRepo = new PrismaWebhookAttemptRepository();
     
@@ -98,14 +206,38 @@ transfeeraWebhookRouter.post("/", async (req: Request, res: Response) => {
     } else {
       // Se o secret está configurado no banco, validar assinatura
       if (!raw || !sigHeader) {
+        logger.warn(
+          {
+            hasRaw: !!raw,
+            rawLength: raw ? raw.length : 0,
+            hasSigHeader: !!sigHeader,
+            eventId: event?.id,
+            eventType: event?.object,
+            accountId: event?.account_id,
+            allSignatureHeaders: Object.entries(req.headers)
+              .filter(([k]) => k.toLowerCase().includes("signature"))
+              .map(([k, v]) => `${k}: ${String(v).substring(0, 20)}...`),
+            tip: "Verifique se a Transfeera está enviando o header 'Transfeera-Signature' e se o middleware express.raw() está antes de express.json()",
+          },
+          "Webhook rejected: missing raw body or signature header"
+        );
         await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
-        return res.status(401).json({ error: "INVALID_SIGNATURE" });
+        return res.status(401).json({ error: "INVALID_SIGNATURE", details: "Missing raw body or signature header" });
       }
 
       const config = await webhookConfigRepo.findByAccountId(event.account_id);
       if (!config) {
+        logger.warn(
+          {
+            accountId: event.account_id,
+            eventId: event?.id,
+            eventType: event?.object,
+            tip: "O account_id do evento não corresponde a nenhum webhook configurado. Verifique se o webhook foi registrado corretamente na Transfeera.",
+          },
+          "Webhook rejected: webhook not configured for account"
+        );
         await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
-        return res.status(401).json({ error: "WEBHOOK_NOT_CONFIGURED" });
+        return res.status(401).json({ error: "WEBHOOK_NOT_CONFIGURED", details: `No webhook configured for account_id: ${event.account_id}` });
       }
 
       const secret = await webhookConfigRepo.getSignatureSecret(config.webhookId);
@@ -141,8 +273,24 @@ transfeeraWebhookRouter.post("/", async (req: Request, res: Response) => {
       const valid = provided === expected || (provided.length === expected.length && crypto.timingSafeEqual(Buffer.from(provided, "hex"), Buffer.from(expected, "hex")));
 
       if (!valid) {
+        logger.warn(
+          {
+            eventId: event?.id,
+            eventType: event?.object,
+            accountId: event.account_id,
+            signatureLength: provided.length,
+            expectedLength: expected.length,
+            signatureMatch: provided === expected,
+            providedPrefix: provided.substring(0, 10),
+            expectedPrefix: expected.substring(0, 10),
+            timestamp: timestamp,
+            payloadLength: rawPayload.length,
+            tip: "A assinatura não corresponde. Verifique se o secret está correto e se o payload não foi modificado.",
+          },
+          "Webhook rejected: invalid signature"
+        );
         await attemptRepo.record({ provider: "transfeera", type: event?.object || "unknown", eventId: event?.id || "unknown", status: "rejected", attempt: 0, signatureValid: false, payload: (event?.data as any) || {} });
-        return res.status(401).json({ error: "INVALID_SIGNATURE" });
+        return res.status(401).json({ error: "INVALID_SIGNATURE", details: "Signature mismatch" });
       }
     }
 

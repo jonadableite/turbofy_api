@@ -9,10 +9,10 @@
  * @reliability Retry automático, DLQ, circuit breaker
  */
 
-import { Webhook } from "../../domain/entities/Webhook";
 import { WebhookEventEnvelope } from "../../application/useCases/DispatchWebhooks";
-import { EventHandler, RabbitMQConsumer } from "../adapters/messaging/RabbitMQConsumer";
+import { Webhook } from "../../domain/entities/Webhook";
 import { MessagingFactory } from "../adapters/messaging/MessagingFactory";
+import { EventHandler, RabbitMQConsumer } from "../adapters/messaging/RabbitMQConsumer";
 import { FetchWebhookDeliveryAdapter } from "../adapters/webhooks/FetchWebhookDeliveryAdapter";
 import { prisma } from "../database/prismaClient";
 import { logger } from "../logger";
@@ -385,15 +385,26 @@ export class WebhookDeliveryConsumer implements EventHandler {
  * Inicializa o consumer de WebhookDelivery
  */
 export async function startWebhookDeliveryConsumer(): Promise<RabbitMQConsumer> {
-  const consumer = new RabbitMQConsumer();
+  // Configurar binding para a fila de delivery de webhooks
+  const consumer = new RabbitMQConsumer([
+    {
+      eventType: "webhook.delivery",
+      queueName: "turbofy.webhooks.delivery",
+    },
+  ]);
+  
   const handler = new WebhookDeliveryConsumer();
 
-  // Registrar handler para delivery.* (todas as deliveries)
-  consumer.registerHandler("delivery.*", handler);
+  // Registrar handler para o evento de delivery
+  consumer.registerHandler("webhook.delivery", handler);
 
   await consumer.start();
 
-  logger.info("WebhookDeliveryConsumer started");
+  logger.info({
+    type: "WEBHOOK_DELIVERY_STARTED",
+    message: "WebhookDeliveryConsumer started",
+    queue: "turbofy.webhooks.delivery",
+  });
 
   return consumer;
 }

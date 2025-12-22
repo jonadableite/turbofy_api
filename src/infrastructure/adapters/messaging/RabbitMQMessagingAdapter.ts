@@ -15,8 +15,8 @@
 import { connect } from 'amqplib';
 import { env } from '../../../config/env';
 import {
-    MessagingPort,
-    OutboundEvent,
+  MessagingPort,
+  OutboundEvent,
 } from '../../../ports/MessagingPort';
 import { logger } from '../../logger';
 
@@ -30,6 +30,7 @@ const EXCHANGES = {
   BILLING: 'turbofy.billing',
   ENROLLMENTS: 'turbofy.enrollments',
   ONBOARDING: 'turbofy.onboarding',
+  WEBHOOKS: 'turbofy.webhooks',
 } as const;
 
 const ROUTING_KEYS = {
@@ -39,6 +40,8 @@ const ROUTING_KEYS = {
   ENROLLMENT_GRANTED: 'enrollment.granted',
   SETTLEMENT_REQUESTED: 'settlement.requested',
   DOCUMENT_UPLOADED: 'document.uploaded',
+  WEBHOOK_DISPATCH: 'webhook.dispatch',
+  WEBHOOK_DELIVERY: 'webhook.delivery',
 } as const;
 
 export class RabbitMQMessagingAdapter implements MessagingPort {
@@ -73,6 +76,9 @@ export class RabbitMQMessagingAdapter implements MessagingPort {
         durable: true,
       });
       await channel.assertExchange(EXCHANGES.ONBOARDING, 'topic', {
+        durable: true,
+      });
+      await channel.assertExchange(EXCHANGES.WEBHOOKS, 'topic', {
         durable: true,
       });
 
@@ -112,6 +118,34 @@ export class RabbitMQMessagingAdapter implements MessagingPort {
         EXCHANGES.ONBOARDING,
         ROUTING_KEYS.DOCUMENT_UPLOADED
       );
+
+      // Configurar queues de webhooks para integradores
+      await this.setupQueueWithDLQ(
+        'turbofy.webhooks.dispatch',
+        EXCHANGES.WEBHOOKS,
+        'webhook.dispatch'
+      );
+      
+      // Queue para delivery de webhooks (usa pattern para múltiplos eventos)
+      await this.setupQueueWithDLQ(
+        'turbofy.webhooks.delivery',
+        EXCHANGES.WEBHOOKS,
+        'webhook.delivery.#'
+      );
+
+      // Configurar bindings adicionais para eventos que disparam webhooks
+      // Isso permite que o WebhookDispatcherConsumer escute múltiplos eventos
+      const webhookEvents = [
+        'charge.created', 'charge.paid', 'charge.expired',
+        'billing.created', 'billing.paid', 'billing.expired', 'billing.refunded',
+        'withdraw.done', 'withdraw.failed',
+        'enrollment.created',
+        'webhook.test',
+      ];
+      
+      for (const event of webhookEvents) {
+        await channel.bindQueue('turbofy.webhooks.dispatch', EXCHANGES.WEBHOOKS, `turbofy.webhooks.${event}`);
+      }
 
       // Handler para erros de conexão
       connection.on('error', (err: Error) => {
@@ -246,6 +280,13 @@ export class RabbitMQMessagingAdapter implements MessagingPort {
   }
 
   private getExchangeForEventType(eventType: string): string {
+    // Webhooks para integradores devem ir para exchange de webhooks
+    if (
+      eventType.includes('webhook') ||
+      eventType.startsWith('turbofy.webhooks')
+    ) {
+      return EXCHANGES.WEBHOOKS;
+    }
     if (
       eventType.includes('charge') ||
       eventType.includes('payment')

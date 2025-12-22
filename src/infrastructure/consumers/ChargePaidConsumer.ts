@@ -11,13 +11,9 @@ import { DispatchWebhooks } from "../../application/useCases/DispatchWebhooks";
 import { ProcessPixWebhook } from "../../application/useCases/ProcessPixWebhook";
 import { MessagingFactory } from "../adapters/messaging/MessagingFactory";
 import { EventHandler, RabbitMQConsumer } from "../adapters/messaging/RabbitMQConsumer";
-import { FetchWebhookDeliveryAdapter } from "../adapters/webhooks/FetchWebhookDeliveryAdapter";
 import { PrismaChargeRepository } from "../database/PrismaChargeRepository";
-import { prisma } from "../database/prismaClient";
 import { PrismaEnrollmentRepository } from "../database/repositories/PrismaEnrollmentRepository";
 import { PrismaPaymentInteractionRepository } from "../database/repositories/PrismaPaymentInteractionRepository";
-import { PrismaWebhookLogRepository } from "../database/repositories/PrismaWebhookLogRepository";
-import { PrismaWebhookRepository } from "../database/repositories/PrismaWebhookRepository";
 import { logger } from "../logger";
 
 export class ChargePaidConsumer implements EventHandler {
@@ -132,13 +128,24 @@ export class ChargePaidConsumer implements EventHandler {
  * Inicializa o consumer de charge.paid
  */
 export async function startChargePaidConsumer(): Promise<RabbitMQConsumer> {
-  const consumer = new RabbitMQConsumer();
+  // Configurar binding para a fila de charge.paid
+  const consumer = new RabbitMQConsumer([
+    {
+      eventType: "charge.paid",
+      queueName: "turbofy.payments.charge.paid",
+    },
+  ]);
+  
   const handler = new ChargePaidConsumer();
 
   consumer.registerHandler("charge.paid", handler);
   await consumer.start();
 
-  logger.info("ChargePaidConsumer started");
+  logger.info({
+    type: "CHARGE_PAID_CONSUMER_STARTED",
+    message: "ChargePaidConsumer started",
+    queue: "turbofy.payments.charge.paid",
+  });
 
   return consumer;
 }

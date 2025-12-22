@@ -9,8 +9,8 @@
  */
 
 import { WebhookEventEnvelope } from "../../application/useCases/DispatchWebhooks";
-import { EventHandler, RabbitMQConsumer } from "../adapters/messaging/RabbitMQConsumer";
 import { MessagingFactory } from "../adapters/messaging/MessagingFactory";
+import { EventHandler, RabbitMQConsumer } from "../adapters/messaging/RabbitMQConsumer";
 import { prisma } from "../database/prismaClient";
 import { logger } from "../logger";
 
@@ -141,32 +141,26 @@ export class WebhookDispatcherConsumer implements EventHandler {
  * Inicializa o consumer de WebhookDispatcher
  */
 export async function startWebhookDispatcherConsumer(): Promise<RabbitMQConsumer> {
-  const consumer = new RabbitMQConsumer();
+  // Configurar binding para a fila de dispatch de webhooks
+  const consumer = new RabbitMQConsumer([
+    {
+      eventType: "webhook.dispatch",
+      queueName: "turbofy.webhooks.dispatch",
+    },
+  ]);
+  
   const handler = new WebhookDispatcherConsumer();
 
-  // Registrar handler para todos os eventos de webhook
-  // Routing keys: charge.*, billing.*, withdraw.*, enrollment.*
-  const events = [
-    "charge.created",
-    "charge.paid",
-    "charge.expired",
-    "billing.created",
-    "billing.paid",
-    "billing.expired",
-    "billing.refunded",
-    "withdraw.done",
-    "withdraw.failed",
-    "enrollment.created",
-    "webhook.test", // Evento de teste
-  ];
-
-  for (const event of events) {
-    consumer.registerHandler(event, handler);
-  }
+  // Registrar handler para o evento de dispatch
+  consumer.registerHandler("webhook.dispatch", handler);
 
   await consumer.start();
 
-  logger.info("WebhookDispatcherConsumer started");
+  logger.info({
+    type: "WEBHOOK_DISPATCHER_STARTED",
+    message: "WebhookDispatcherConsumer started",
+    queue: "turbofy.webhooks.dispatch",
+  });
 
   return consumer;
 }

@@ -27,8 +27,8 @@ import { RabbitMQMessagingAdapter } from "./infrastructure/adapters/messaging/Ra
 import { startChargeExpiredConsumer } from "./infrastructure/consumers/ChargeExpiredConsumer";
 import { startChargePaidConsumer } from "./infrastructure/consumers/ChargePaidConsumer";
 import { startDocumentValidationConsumer } from "./infrastructure/consumers/DocumentValidationConsumer";
-import { startWebhookDispatcherConsumer } from "./infrastructure/consumers/WebhookDispatcherConsumer";
 import { startWebhookDeliveryConsumer } from "./infrastructure/consumers/WebhookDeliveryConsumer";
+import { startWebhookDispatcherConsumer } from "./infrastructure/consumers/WebhookDispatcherConsumer";
 import { adminRouter } from "./infrastructure/http/routes/adminRoutes";
 import { affiliatesRouter } from "./infrastructure/http/routes/affiliatesRoutes";
 import { apiKeysRouter } from "./infrastructure/http/routes/apiKeysRoutes";
@@ -41,6 +41,7 @@ import { commissionRouter } from "./infrastructure/http/routes/commissionRoutes"
 import { couponsRouter } from "./infrastructure/http/routes/couponsRoutes";
 import { dashboardRouter } from "./infrastructure/http/routes/dashboardRoutes";
 import { domainConfigRouter } from "./infrastructure/http/routes/domainConfigRoutes";
+import { integrationsWebhooksRouter } from "./infrastructure/http/routes/integrationsWebhooksRoutes";
 import { kycRouter } from "./infrastructure/http/routes/kycRoutes";
 import { onboardingRouter } from "./infrastructure/http/routes/onboardingRoutes";
 import { pixKeyRouter } from "./infrastructure/http/routes/pixKeyRoutes";
@@ -57,7 +58,6 @@ import { uploadRouter } from "./infrastructure/http/routes/uploadRoutes";
 import { videoRouter } from "./infrastructure/http/routes/videoRoutes";
 import { webhooksRouter } from "./infrastructure/http/routes/webhooksRoutes";
 import { withdrawalRouter } from "./infrastructure/http/routes/withdrawalRoutes";
-import { integrationsWebhooksRouter } from "./infrastructure/http/routes/integrationsWebhooksRoutes";
 import { setupSwagger } from "./infrastructure/http/swagger";
 import makeLogger, { pinoLogger } from "./infrastructure/logger/logger";
 
@@ -119,6 +119,22 @@ app.use(
 );
 
 app.use(cookieParser());
+
+// Middleware para capturar rawBody para webhooks (deve vir antes de express.json())
+// Necessário para validar assinatura HMAC dos webhooks
+app.use('/webhooks/transfeera', express.raw({ type: 'application/json' }), (req, res, next) => {
+  // Salvar rawBody antes do parsing
+  (req as any).rawBody = req.body;
+  // Converter para JSON para o próximo middleware
+  try {
+    req.body = JSON.parse(req.body.toString('utf8'));
+  } catch (e) {
+    // Se falhar, deixar body vazio
+    req.body = {};
+  }
+  next();
+});
+
 app.use(express.json());
 
 // Otimizar logs HTTP - reduzir verbosidade drasticamente

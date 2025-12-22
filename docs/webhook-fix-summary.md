@@ -1,6 +1,45 @@
 # Correção: Problema de Webhook Transfeera - Pagamentos não Processados
 
-## 🔍 Problema Identificado
+## 🆕 Atualização v2 (Janeiro 2025)
+
+### Problemas Adicionais Identificados e Corrigidos
+
+1. **Header de assinatura incorreto**: O código buscava `x-transfeera-signature` mas a Transfeera envia `Transfeera-Signature` (sem prefixo `x-`). Express.js converte para lowercase: `transfeera-signature`.
+
+2. **Filas RabbitMQ não configuradas**: As filas de webhook (`turbofy.webhooks.dispatch` e `turbofy.webhooks.delivery`) não estavam sendo criadas no `RabbitMQMessagingAdapter`.
+
+3. **Consumers com bindings incorretos**: Os consumers `WebhookDispatcherConsumer` e `WebhookDeliveryConsumer` eram inicializados sem bindings específicos.
+
+### Arquivos Corrigidos (v2)
+
+- `turbofy_api/src/infrastructure/http/routes/transfeeraWebhookRoutes.ts`
+  - Corrigido header de assinatura para buscar `transfeera-signature`
+  - Adicionados endpoints `/health` e `/status` para diagnóstico
+  - Melhorados logs de diagnóstico
+  
+- `turbofy_api/src/infrastructure/adapters/messaging/RabbitMQMessagingAdapter.ts`
+  - Adicionado exchange `turbofy.webhooks`
+  - Configuradas filas `turbofy.webhooks.dispatch` e `turbofy.webhooks.delivery`
+  - Adicionados bindings para eventos que disparam webhooks
+  
+- `turbofy_api/src/infrastructure/consumers/WebhookDispatcherConsumer.ts`
+  - Configurado binding correto para `turbofy.webhooks.dispatch`
+  
+- `turbofy_api/src/infrastructure/consumers/WebhookDeliveryConsumer.ts`
+  - Configurado binding correto para `turbofy.webhooks.delivery`
+
+### Novos Endpoints de Diagnóstico
+
+- `GET /webhooks/transfeera/health` - Verifica se o endpoint está acessível
+- `GET /webhooks/transfeera/status` - Mostra configurações e tentativas recentes
+
+### Novos Scripts de Diagnóstico
+
+- `npx ts-node scripts/verify-transfeera-webhooks.ts` - Verifica configuração completa
+
+---
+
+## 🔍 Problema Identificado (Original)
 
 Um pagamento PIX foi realizado, mas o webhook da Transfeera não processou corretamente o evento, resultando em:
 - Status da charge não atualizado para `PAID`
