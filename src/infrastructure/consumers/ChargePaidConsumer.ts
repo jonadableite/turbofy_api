@@ -7,6 +7,7 @@
  * @performance Processamento assíncrono via RabbitMQ
  */
 
+import { CreditWalletOnPayment } from "../../application/useCases/CreditWalletOnPayment";
 import { DispatchWebhooks } from "../../application/useCases/DispatchWebhooks";
 import { ProcessPixWebhook } from "../../application/useCases/ProcessPixWebhook";
 import { MessagingFactory } from "../adapters/messaging/MessagingFactory";
@@ -20,6 +21,7 @@ export class ChargePaidConsumer implements EventHandler {
   private processPixWebhook: ProcessPixWebhook;
   private chargeRepository: PrismaChargeRepository;
   private dispatchWebhooks: DispatchWebhooks;
+  private creditWallet: CreditWalletOnPayment;
 
   constructor() {
     const chargeRepository = new PrismaChargeRepository();
@@ -36,6 +38,9 @@ export class ChargePaidConsumer implements EventHandler {
 
     // DispatchWebhooks agora usa apenas messaging (refatorado para async)
     this.dispatchWebhooks = new DispatchWebhooks(messaging);
+
+    // CreditWalletOnPayment para atualizar saldo da carteira
+    this.creditWallet = new CreditWalletOnPayment();
 
     this.chargeRepository = chargeRepository;
   }
@@ -75,6 +80,33 @@ export class ChargePaidConsumer implements EventHandler {
         logger.info({
           type: "CHARGE_PAID_NO_ENROLLMENT",
           message: "No enrollment created (not a course charge or already exists)",
+          payload: { chargeId },
+        });
+      }
+
+      // Creditar wallet do merchant (não bloquear o processamento principal)
+      try {
+        const walletResult = await this.creditWallet.execute({
+          chargeId,
+          traceId: parsed.traceId,
+        });
+
+        if (walletResult.walletCredited) {
+          logger.info({
+            type: "CHARGE_PAID_WALLET_CREDITED",
+            message: "Wallet credited on payment",
+            payload: {
+              chargeId,
+              merchantId: walletResult.merchantId,
+              amountCreditedCents: walletResult.amountCreditedCents,
+            },
+          });
+        }
+      } catch (err) {
+        logger.error({
+          type: "CHARGE_PAID_WALLET_CREDIT_FAILED",
+          message: "Failed to credit wallet on payment (non-blocking)",
+          error: err,
           payload: { chargeId },
         });
       }
