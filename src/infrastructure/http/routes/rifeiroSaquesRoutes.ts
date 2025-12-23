@@ -63,8 +63,8 @@ rifeiroSaquesRouter.get("/", async (req: Request, res: Response) => {
     const merchantId = await ensureMerchantId(req.user.id);
     await assertRifeiro(merchantId);
 
-    // Buscar wallet e settlements
-    const [wallet, settlements, completedSettlements] = await Promise.all([
+    // Buscar wallet, settlements e pixKey
+    const [wallet, settlements, completedSettlements, pixKey, merchant] = await Promise.all([
       prisma.wallet.findUnique({
         where: { merchantId },
         select: {
@@ -89,6 +89,25 @@ rifeiroSaquesRouter.get("/", async (req: Request, res: Response) => {
       prisma.settlement.aggregate({
         where: { merchantId, status: "COMPLETED" },
         _sum: { amountCents: true },
+      }),
+      prisma.pixKey.findFirst({
+        where: { merchantId },
+        select: {
+          type: true,
+          key: true,
+          status: true,
+          verificationSource: true,
+          verifiedAt: true,
+          rejectedAt: true,
+          rejectionReason: true,
+        },
+      }),
+      prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: {
+          name: true,
+          document: true,
+        },
       }),
     ]);
 
@@ -115,6 +134,21 @@ rifeiroSaquesRouter.get("/", async (req: Request, res: Response) => {
       summary: {
         totalRequestedCents: totalRequested,
         totalCompletedCents: completedSettlements._sum.amountCents ?? 0,
+      },
+      pixKey: pixKey
+        ? {
+            type: pixKey.type,
+            key: pixKey.key,
+            status: pixKey.status,
+            verificationSource: pixKey.verificationSource,
+            verifiedAt: pixKey.verifiedAt,
+            rejectedAt: pixKey.rejectedAt,
+            rejectionReason: pixKey.rejectionReason,
+          }
+        : null,
+      merchant: {
+        name: merchant?.name ?? "Merchant",
+        document: merchant?.document ?? "",
       },
     });
   } catch (err) {

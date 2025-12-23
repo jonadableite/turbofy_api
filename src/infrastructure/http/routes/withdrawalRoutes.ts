@@ -12,6 +12,7 @@ withdrawalRouter.post("/", controller.create.bind(controller));
 withdrawalRouter.get("/user-info", controller.getUserInfo.bind(controller));
 withdrawalRouter.get("/:id", controller.get.bind(controller));
 withdrawalRouter.get("/", controller.history.bind(controller));
+withdrawalRouter.post("/:id/cancel", controller.cancel.bind(controller));
 withdrawalRouter.post("/:id/process", controller.process.bind(controller));
 
 export { withdrawalRouter };

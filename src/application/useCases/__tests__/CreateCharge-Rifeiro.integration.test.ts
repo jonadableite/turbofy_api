@@ -30,6 +30,26 @@ describe("CreateCharge - Rifeiro Integration", () => {
   let rifeiroDocument: string;
 
   beforeAll(async () => {
+    // Limpar vestígios de execuções anteriores
+    await prisma.paymentInteraction.deleteMany({
+      where: { merchant: { document: { in: ["12345678901", "98765432100"] } } },
+    });
+    await prisma.chargeSplit.deleteMany({
+      where: { charge: { merchant: { document: { in: ["12345678901", "98765432100"] } } } },
+    });
+    await prisma.fee.deleteMany({
+      where: { charge: { merchant: { document: { in: ["12345678901", "98765432100"] } } } },
+    });
+    await prisma.charge.deleteMany({
+      where: { merchant: { document: { in: ["12345678901", "98765432100"] } } },
+    });
+    await prisma.merchant.deleteMany({
+      where: { document: { in: ["12345678901", "98765432100"] } },
+    });
+    await prisma.user.deleteMany({
+      where: { document: { in: ["12345678901", "98765432100"] } },
+    });
+
     // Criar dados de teste
     rifeiroDocument = "12345678901";
 
@@ -156,6 +176,15 @@ describe("CreateCharge - Rifeiro Integration", () => {
     await prisma.fee.deleteMany({
       where: { charge: { merchantId: rifeiroMerchantId } },
     });
+    await prisma.paymentInteraction.deleteMany({
+      where: {
+        merchantId: {
+          in: [rifeiroMerchantId, producerMerchantId].filter(
+            (id): id is string => Boolean(id)
+          ),
+        },
+      },
+    });
     await prisma.charge.deleteMany({
       where: { merchantId: rifeiroMerchantId },
     });
@@ -229,6 +258,26 @@ describe("CreateCharge - Rifeiro Integration", () => {
     const rifeiro2MerchantId = randomUUID();
     const rifeiro2Document = "11111111111";
 
+    // Garantir que não haja resíduos de execuções anteriores
+    await prisma.paymentInteraction.deleteMany({
+      where: { merchant: { document: rifeiro2Document } },
+    });
+    await prisma.chargeSplit.deleteMany({
+      where: { charge: { merchant: { document: rifeiro2Document } } },
+    });
+    await prisma.fee.deleteMany({
+      where: { charge: { merchant: { document: rifeiro2Document } } },
+    });
+    await prisma.charge.deleteMany({
+      where: { merchant: { document: rifeiro2Document } },
+    });
+    await prisma.merchant.deleteMany({
+      where: { document: rifeiro2Document },
+    });
+    await prisma.user.deleteMany({
+      where: { document: rifeiro2Document },
+    });
+
     await prisma.user.create({
       data: {
         id: rifeiro2UserId,
@@ -277,6 +326,12 @@ describe("CreateCharge - Rifeiro Integration", () => {
     expect(result.fees![0].amountCents).toBe(100); // 1% de R$100
 
     // Limpar
+    await prisma.fee.deleteMany({
+      where: { charge: { merchantId: rifeiro2MerchantId } },
+    });
+    await prisma.paymentInteraction.deleteMany({
+      where: { merchantId: rifeiro2MerchantId },
+    });
     await prisma.charge.deleteMany({
       where: { merchantId: rifeiro2MerchantId },
     });

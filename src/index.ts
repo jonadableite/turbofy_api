@@ -51,6 +51,7 @@ import { productsRouter } from "./infrastructure/http/routes/productsRoutes";
 import { reconciliationsRouter } from "./infrastructure/http/routes/reconciliationsRoutes";
 import { rifeiroRouter } from "./infrastructure/http/routes/rifeiroRoutes";
 import { rifeiroSaquesRouter } from "./infrastructure/http/routes/rifeiroSaquesRoutes";
+import { rifeiroPixKeyRouter } from "./infrastructure/http/routes/rifeiroPixKeyRoutes";
 import { rifeiroWebhookRouter } from "./infrastructure/http/routes/rifeiroWebhookRoutes";
 import { settlementsRouter } from "./infrastructure/http/routes/settlementsRoutes";
 import { studioRouter } from "./infrastructure/http/routes/studioRoutes";
@@ -58,6 +59,7 @@ import { transfeeraWebhookRouter } from "./infrastructure/http/routes/transfeera
 import { uploadRouter } from "./infrastructure/http/routes/uploadRoutes";
 import { videoRouter } from "./infrastructure/http/routes/videoRoutes";
 import { webhooksRouter } from "./infrastructure/http/routes/webhooksRoutes";
+import { webhookRouter } from "./infrastructure/http/routes/webhookRoutes";
 import { withdrawalRouter } from "./infrastructure/http/routes/withdrawalRoutes";
 import { setupSwagger } from "./infrastructure/http/swagger";
 import makeLogger, { pinoLogger } from "./infrastructure/logger/logger";
@@ -268,6 +270,7 @@ app.use('/onboarding', onboardingRouter);
 app.use('/admin', adminRouter);
 app.use('/api-keys', apiKeysRouter);
 app.use('/webhooks', webhooksRouter);
+app.use('/webhooks/internal', webhookRouter); // Webhooks internos (Transfeera, etc)
 app.use('/integrations/webhooks', integrationsWebhooksRouter); // Webhooks para integradores (client credentials)
 app.use('/kyc', kycRouter);
 app.use('/pix-key', pixKeyRouter);
@@ -277,6 +280,7 @@ app.use('/coupons', couponsRouter);
 app.use('/rifeiro/webhooks', rifeiroWebhookRouter);
 app.use('/rifeiro', rifeiroRouter);
 app.use('/rifeiro/saques', rifeiroSaquesRouter);
+app.use('/rifeiro/pix-key', rifeiroPixKeyRouter);
 // Producer splits deve vir antes da rota genérica para não ser interceptada
 app.use('/producer/splits', producerSplitsRouter);
 logger.info({

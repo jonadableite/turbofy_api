@@ -50,6 +50,13 @@ export class PrismaWithdrawalRepository implements WithdrawalRepositoryPort {
     return withdrawal ? mapWithdrawal(withdrawal) : null;
   }
 
+  async findByTransferaTxId(transferaTxId: string): Promise<WithdrawalRecord | null> {
+    const withdrawal = await prisma.withdrawal.findFirst({
+      where: { transferaTxId },
+    });
+    return withdrawal ? mapWithdrawal(withdrawal) : null;
+  }
+
   async findByUserId(params: WithdrawalListParams): Promise<WithdrawalListResult> {
     const page = params.page ?? 1;
     const limit = Math.min(params.limit ?? 10, 100);

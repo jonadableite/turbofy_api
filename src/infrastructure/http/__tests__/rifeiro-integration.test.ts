@@ -38,6 +38,13 @@ describe("Rifeiro Integration - Fluxo Completo", () => {
 
   beforeAll(async () => {
     // Limpar dados de teste anteriores (se houver)
+    await prisma.paymentInteraction.deleteMany({
+      where: {
+        merchant: {
+          email: { contains: "@test-rifeiro.com" },
+        },
+      },
+    });
     await prisma.commissionRule.deleteMany({
       where: {
         merchant: {
@@ -200,6 +207,11 @@ describe("Rifeiro Integration - Fluxo Completo", () => {
         charge: {
           merchantId: { in: [rifeiroMerchantId, producerMerchantId] },
         },
+      },
+    });
+    await prisma.paymentInteraction.deleteMany({
+      where: {
+        merchantId: { in: [rifeiroMerchantId, producerMerchantId] },
       },
     });
     await prisma.charge.deleteMany({
@@ -507,6 +519,18 @@ describe("Rifeiro Integration - Fluxo Completo", () => {
         where: { merchantId: producer2MerchantId },
       });
       await prisma.affiliate.deleteMany({
+        where: { merchantId: producer2MerchantId },
+      });
+      await prisma.chargeSplit.deleteMany({
+        where: { merchantId: producer2MerchantId },
+      });
+      await prisma.fee.deleteMany({
+        where: { charge: { merchantId: producer2MerchantId } },
+      });
+      await prisma.paymentInteraction.deleteMany({
+        where: { merchantId: producer2MerchantId },
+      });
+      await prisma.charge.deleteMany({
         where: { merchantId: producer2MerchantId },
       });
       await prisma.merchant.delete({ where: { id: producer2MerchantId } });

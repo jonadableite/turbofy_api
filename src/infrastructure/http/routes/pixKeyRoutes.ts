@@ -11,6 +11,7 @@ pixKeyRouter.use(ensureAuthenticated, requireKycApproved);
 pixKeyRouter.post("/", controller.register.bind(controller));
 pixKeyRouter.get("/", controller.get.bind(controller));
 pixKeyRouter.post("/verify", controller.verify.bind(controller));
+pixKeyRouter.post("/validate-transfeera", controller.validateWithTransfeera.bind(controller));
 
 export { pixKeyRouter };
 

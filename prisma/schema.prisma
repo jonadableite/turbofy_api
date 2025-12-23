@@ -288,15 +288,20 @@ model Payment {
 }
 
 model PixKey {
-  id          String   @id @default(uuid())
-  merchantId  String
-  merchant    Merchant @relation(fields: [merchantId], references: [id])
-  type        String
-  key         String   @unique
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  isActive    Boolean  @default(true)
+  id                   String    @id @default(uuid())
+  merchantId           String
+  merchant             Merchant  @relation(fields: [merchantId], references: [id])
+  type                 String
+  key                  String    @unique
+  description          String?
+  status               String    @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, REJECTED
+  verificationSource   String?   // INTERNAL_MATCH, TRANSFEERA_API
+  verifiedAt           DateTime?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  isActive             Boolean   @default(true)
 }
 
 model BankAccount {

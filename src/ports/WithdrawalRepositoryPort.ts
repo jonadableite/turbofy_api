@@ -33,6 +33,8 @@ export interface WithdrawalRepositoryPort {
 
   findByIdempotencyKey(userId: string, idempotencyKey: string): Promise<WithdrawalRecord | null>;
 
+  findByTransferaTxId(transferaTxId: string): Promise<WithdrawalRecord | null>;
+
   findByUserId(params: WithdrawalListParams): Promise<WithdrawalListResult>;
 
   create(input: Omit<WithdrawalRecord, "createdAt" | "processedAt" | "transferaTxId" | "failureReason">): Promise<WithdrawalRecord>;

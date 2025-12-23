@@ -54,6 +54,13 @@ jest.mock("../../database/PrismaChargeRepository", () => {
     },
   };
 });
+jest.mock("../../database/repositories/PrismaPaymentInteractionRepository", () => ({
+  PrismaPaymentInteractionRepository: class {
+    async create() {
+      return undefined;
+    }
+  },
+}));
 
 describe("chargesRoutes extended", () => {
   const app = express();

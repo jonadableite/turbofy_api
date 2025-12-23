@@ -74,7 +74,7 @@ describe("recaptcha.verifyRecaptcha", () => {
 
   it("retorna false quando score é abaixo do mínimo", async () => {
     jest.resetModules();
-    jest.doMock("../../config/env", () => ({ env: { RECAPTCHA_SECRET_KEY: "secret" } }));
+    jest.doMock("../../../config/env", () => ({ env: { RECAPTCHA_SECRET_KEY: "secret" } }));
     global.fetch = jest.fn(async () => ({
       ok: true,
       json: async () => ({ success: true, score: 0.3 }),

@@ -30,6 +30,10 @@ describe('Onboarding routes (Integration)', () => {
 
   beforeEach(async () => {
     // Clean up
+    await prisma.paymentInteraction.deleteMany();
+    await prisma.chargeSplit.deleteMany();
+    await prisma.fee.deleteMany();
+    await prisma.charge.deleteMany();
     await prisma.merchantDocument.deleteMany();
     await prisma.merchantProfile.deleteMany();
     await prisma.merchant.deleteMany();

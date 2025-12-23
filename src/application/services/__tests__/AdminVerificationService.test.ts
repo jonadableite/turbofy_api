@@ -8,27 +8,23 @@ jest.mock("../../../infrastructure/email/EmailService", () => ({
   })),
 }));
 
-type PrismaMock = ReturnType<typeof createPrismaMock>;
-let prismaMock: PrismaMock;
-
-function createPrismaMock() {
-  return {
-    merchantProfile: {
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-    },
-    merchantDocument: {
-      updateMany: jest.fn(),
-    },
-    $transaction: jest.fn(),
-  };
-}
-
-jest.mock("../../../infrastructure/database/prismaClient", () => {
-  prismaMock = createPrismaMock();
-  return { prisma: prismaMock };
+const createPrismaMock = () => ({
+  merchantProfile: {
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  },
+  merchantDocument: {
+    updateMany: jest.fn(),
+  },
+  $transaction: jest.fn(),
 });
+
+const prismaMock = createPrismaMock();
+
+jest.mock("../../../infrastructure/database/prismaClient", () => ({
+  prisma: prismaMock,
+}));
 
 describe("AdminVerificationService", () => {
   const service = new AdminVerificationService();

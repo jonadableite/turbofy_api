@@ -212,8 +212,8 @@ describe("FeeCalculator Service", () => {
                 splitsCount: 10,
             });
 
-            expect(fee).toBe(800); // 1% (500) + R$0,03*10 (300) = 800
-            expect(netAmount).toBe(49200); // R$ 492,00
+            expect(fee).toBe(530); // 1% (500) + R$0,03*10 (30) = 530
+            expect(netAmount).toBe(49470); // R$ 494,70
         });
 
         it("PRODUCER: venda de curso de R$ 197.00", () => {
