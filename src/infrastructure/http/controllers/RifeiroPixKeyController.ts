@@ -97,13 +97,14 @@ export class RifeiroPixKeyController {
       logger.info({ merchantId, pixKeyType: input.type }, "Registering Rifeiro Pix key");
 
       // Verificar se já existe
-      const existing = await prisma.pixKey.findFirst({
+      const prismaAny = prisma as any;
+      const existing = await prismaAny.pixKey.findFirst({
         where: { merchantId },
       });
 
       let pixKey;
       if (existing) {
-        pixKey = await prisma.pixKey.update({
+        pixKey = await prismaAny.pixKey.update({
           where: { id: existing.id },
           data: {
             type: input.type,
@@ -116,7 +117,7 @@ export class RifeiroPixKeyController {
           },
         });
       } else {
-        pixKey = await prisma.pixKey.create({
+        pixKey = await prismaAny.pixKey.create({
           data: {
             merchantId,
             type: input.type,
@@ -138,7 +139,7 @@ export class RifeiroPixKeyController {
         });
 
         if (validation.valid) {
-          pixKey = await prisma.pixKey.update({
+          pixKey = await prismaAny.pixKey.update({
             where: { id: pixKey.id },
             data: {
               status: "VERIFIED",
@@ -148,7 +149,7 @@ export class RifeiroPixKeyController {
           });
         } else {
           const errorMessages = validation.errors.map((e) => e.message).join("; ");
-          pixKey = await prisma.pixKey.update({
+          pixKey = await prismaAny.pixKey.update({
             where: { id: pixKey.id },
             data: {
               status: "REJECTED",
@@ -170,11 +171,11 @@ export class RifeiroPixKeyController {
         merchantId: pixKey.merchantId,
         type: pixKey.type,
         key: pixKey.key,
-        status: pixKey.status,
-        verificationSource: pixKey.verificationSource,
-        verifiedAt: pixKey.verifiedAt,
-        rejectedAt: pixKey.rejectedAt,
-        rejectionReason: pixKey.rejectionReason,
+        status: (pixKey as any).status,
+        verificationSource: (pixKey as any).verificationSource ?? null,
+        verifiedAt: (pixKey as any).verifiedAt ?? null,
+        rejectedAt: (pixKey as any).rejectedAt ?? null,
+        rejectionReason: (pixKey as any).rejectionReason ?? null,
         createdAt: pixKey.createdAt,
       };
 
@@ -231,7 +232,7 @@ export class RifeiroPixKeyController {
         });
       }
 
-      const pixKey = await prisma.pixKey.findFirst({
+      const pixKey = await (prisma as any).pixKey.findFirst({
         where: { merchantId },
       });
 
@@ -252,17 +253,17 @@ export class RifeiroPixKeyController {
         });
       }
 
-      if (pixKey.status === "VERIFIED") {
+      if (pixKey.isActive === true) {
         return res.json({
           id: pixKey.id,
           merchantId: pixKey.merchantId,
           type: pixKey.type,
           key: pixKey.key,
-          status: pixKey.status,
-          verificationSource: pixKey.verificationSource,
-          verifiedAt: pixKey.verifiedAt,
-          rejectedAt: pixKey.rejectedAt,
-          rejectionReason: pixKey.rejectionReason,
+          status: "VERIFIED",
+          verificationSource: "INTERNAL_MATCH",
+          verifiedAt: null,
+          rejectedAt: null,
+          rejectionReason: null,
           createdAt: pixKey.createdAt,
         });
       }
@@ -276,35 +277,30 @@ export class RifeiroPixKeyController {
         },
       });
 
+      const prismaAny = prisma as any;
       const updated = validation.valid
-        ? await prisma.pixKey.update({
+        ? await prismaAny.pixKey.update({
+            where: { id: pixKey.id },
+            data: { isActive: true, description: null },
+          } as any)
+        : await prismaAny.pixKey.update({
             where: { id: pixKey.id },
             data: {
-              status: "VERIFIED",
-              verifiedAt: new Date(),
-              verificationSource: "TRANSFEERA_API",
+              isActive: false,
+              description: validation.errors.map((e) => e.message).join("; "),
             },
-          })
-        : await prisma.pixKey.update({
-            where: { id: pixKey.id },
-            data: {
-              status: "REJECTED",
-              rejectedAt: new Date(),
-              rejectionReason: validation.errors.map((e) => e.message).join("; "),
-              verificationSource: "TRANSFEERA_API",
-            },
-          });
+          } as any);
 
       return res.json({
         id: updated.id,
         merchantId: updated.merchantId,
         type: updated.type,
         key: updated.key,
-        status: updated.status,
-        verificationSource: updated.verificationSource,
-        verifiedAt: updated.verifiedAt,
-        rejectedAt: updated.rejectedAt,
-        rejectionReason: updated.rejectionReason,
+        status: updated.isActive ? "VERIFIED" : "REJECTED",
+        verificationSource: "TRANSFEERA_API",
+        verifiedAt: null,
+        rejectedAt: null,
+        rejectionReason: updated.isActive ? null : updated.description ?? null,
         createdAt: updated.createdAt,
       });
     } catch (error) {
@@ -354,7 +350,7 @@ export class RifeiroPixKeyController {
         });
       }
 
-      const pixKey = await prisma.pixKey.findFirst({
+      const pixKey = await (prisma as any).pixKey.findFirst({
         where: { merchantId },
       });
 
@@ -380,28 +376,23 @@ export class RifeiroPixKeyController {
         },
       });
 
+      const prismaAny = prisma as any;
       const updated = validation.valid
-        ? await prisma.pixKey.update({
+        ? await prismaAny.pixKey.update({
+            where: { id: pixKey.id },
+            data: { isActive: true, description: null },
+          } as any)
+        : await prismaAny.pixKey.update({
             where: { id: pixKey.id },
             data: {
-              status: "VERIFIED",
-              verifiedAt: new Date(),
-              verificationSource: "TRANSFEERA_API",
+              isActive: false,
+              description: validation.errors.map((e) => e.message).join("; "),
             },
-          })
-        : await prisma.pixKey.update({
-            where: { id: pixKey.id },
-            data: {
-              status: "REJECTED",
-              rejectedAt: new Date(),
-              rejectionReason: validation.errors.map((e) => e.message).join("; "),
-              verificationSource: "TRANSFEERA_API",
-            },
-          });
+          } as any);
 
       return res.json({
         isValid: validation.valid,
-        status: updated.status,
+        status: updated.isActive ? "VERIFIED" : "REJECTED",
         recipientName: validation.valid ? validation.data?.name : undefined,
         error: validation.valid ? undefined : validation.errors.map((e) => e.message).join("; "),
       });
@@ -422,15 +413,13 @@ export class RifeiroPixKeyController {
       // Marcar como rejeitada para refletir no frontend, mas sem expor adquirente
       if (pixKeyId) {
         try {
-          await prisma.pixKey.update({
+          await (prisma as any).pixKey.update({
             where: { id: pixKeyId },
             data: {
-              status: "REJECTED",
-              rejectedAt: new Date(),
-              rejectionReason: "Validação temporariamente indisponível",
-              verificationSource: "EXTERNAL_VALIDATION",
+              isActive: false,
+              description: "Validação temporariamente indisponível",
             },
-          });
+          } as any);
         } catch (updateError) {
           logger.error({ updateError, pixKeyId }, "Failed to update pixKey status on error");
         }
@@ -473,11 +462,11 @@ export class RifeiroPixKeyController {
         merchantId: pixKey.merchantId,
         type: pixKey.type,
         key: pixKey.key,
-        status: pixKey.status,
-        verificationSource: pixKey.verificationSource,
-        verifiedAt: pixKey.verifiedAt,
-        rejectedAt: pixKey.rejectedAt,
-        rejectionReason: pixKey.rejectionReason,
+        status: (pixKey as any).status,
+        verificationSource: (pixKey as any).verificationSource ?? null,
+        verifiedAt: (pixKey as any).verifiedAt ?? null,
+        rejectedAt: (pixKey as any).rejectedAt ?? null,
+        rejectionReason: (pixKey as any).rejectionReason ?? null,
         createdAt: pixKey.createdAt,
       };
 

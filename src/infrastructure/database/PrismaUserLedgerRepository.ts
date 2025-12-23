@@ -19,18 +19,20 @@ const mapLedger = (entry: any): UserLedgerEntryRecord => ({
 
 export class PrismaUserLedgerRepository implements UserLedgerRepositoryPort {
   async getEntriesForUser(userId: string): Promise<UserLedgerEntryRecord[]> {
-    const entries = await prisma.userLedgerEntry.findMany({
+    const prismaAny = prisma as any;
+    const entries = await prismaAny.userLedgerEntry.findMany({
       where: { userId },
-    });
+    } as any);
     return entries.map(mapLedger);
   }
 
   async createMany(
     entries: Array<Omit<UserLedgerEntryRecord, "id" | "createdAt">>
   ): Promise<UserLedgerEntryRecord[]> {
+    const prismaAny = prisma as any;
     const created = await Promise.all(
       entries.map((entry) =>
-        prisma.userLedgerEntry.create({
+        prismaAny.userLedgerEntry.create({
           data: {
             userId: entry.userId,
             type: entry.type,
@@ -41,7 +43,7 @@ export class PrismaUserLedgerRepository implements UserLedgerRepositoryPort {
             referenceId: entry.referenceId,
             occurredAt: entry.occurredAt,
           },
-        })
+        } as any)
       )
     );
     return created.map(mapLedger);
@@ -49,10 +51,11 @@ export class PrismaUserLedgerRepository implements UserLedgerRepositoryPort {
 
   async updateStatus(params: { ids: string[]; status: string }): Promise<void> {
     if (params.ids.length === 0) return;
-    await prisma.userLedgerEntry.updateMany({
+    const prismaAny = prisma as any;
+    await prismaAny.userLedgerEntry.updateMany({
       where: { id: { in: params.ids } },
       data: { status: params.status },
-    });
+    } as any);
   }
 }
 

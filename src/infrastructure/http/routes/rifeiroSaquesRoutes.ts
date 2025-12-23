@@ -90,18 +90,9 @@ rifeiroSaquesRouter.get("/", async (req: Request, res: Response) => {
         where: { merchantId, status: "COMPLETED" },
         _sum: { amountCents: true },
       }),
-      prisma.pixKey.findFirst({
+      (prisma as any).pixKey.findFirst({
         where: { merchantId },
-        select: {
-          type: true,
-          key: true,
-          status: true,
-          verificationSource: true,
-          verifiedAt: true,
-          rejectedAt: true,
-          rejectionReason: true,
-        },
-      }),
+      } as any),
       prisma.merchant.findUnique({
         where: { id: merchantId },
         select: {
@@ -139,11 +130,11 @@ rifeiroSaquesRouter.get("/", async (req: Request, res: Response) => {
         ? {
             type: pixKey.type,
             key: pixKey.key,
-            status: pixKey.status,
-            verificationSource: pixKey.verificationSource,
-            verifiedAt: pixKey.verifiedAt,
-            rejectedAt: pixKey.rejectedAt,
-            rejectionReason: pixKey.rejectionReason,
+            status: (pixKey as any).status,
+            verificationSource: (pixKey as any).verificationSource ?? null,
+            verifiedAt: (pixKey as any).verifiedAt ?? null,
+            rejectedAt: (pixKey as any).rejectedAt ?? null,
+            rejectionReason: (pixKey as any).rejectionReason ?? null,
           }
         : null,
       merchant: {

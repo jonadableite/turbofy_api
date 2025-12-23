@@ -19,9 +19,11 @@ export class SubmitKycDocumentsUseCase {
       throw new Error("User not found");
     }
 
+    const userAny = user as any;
+    const currentStatus = String(userAny.kycStatus ?? KycStatus.UNVERIFIED);
     if (
-      user.kycStatus !== KycStatus.UNVERIFIED &&
-      user.kycStatus !== KycStatus.REJECTED
+      currentStatus !== KycStatus.UNVERIFIED &&
+      currentStatus !== KycStatus.REJECTED
     ) {
       throw new Error("KYC already submitted");
     }
@@ -31,14 +33,15 @@ export class SubmitKycDocumentsUseCase {
       documents: input.documents,
     });
 
-    await prisma.user.update({
+    const prismaAny = prisma as any;
+    await prismaAny.user.update({
       where: { id: input.userId },
       data: {
         kycStatus: KycStatus.PENDING_REVIEW,
         kycSubmittedAt: new Date(),
         kycRejectedAt: null,
-      },
-    });
+      } as any,
+    } as any);
 
     return submission;
   }

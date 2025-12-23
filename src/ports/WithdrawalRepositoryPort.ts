@@ -4,7 +4,7 @@ export interface WithdrawalRecord {
   amountCents: number;
   feeCents: number;
   totalDebitedCents: number;
-  status: string;
+  status: string; // Prisma usa string; convertimos para enum na borda se necessário
   transferaTxId?: string | null;
   failureReason?: string | null;
   idempotencyKey: string;

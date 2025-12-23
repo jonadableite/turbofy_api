@@ -9,7 +9,8 @@ export class GetOnboardingStatusUseCase {
   constructor(private readonly kycRepository: UserKycRepositoryPort) {}
 
   async execute(input: GetOnboardingStatusInput) {
-    const user = await prisma.user.findUnique({
+    const prismaAny = prisma as any;
+    const user = await prismaAny.user.findUnique({
       where: { id: input.userId },
       select: {
         id: true,
@@ -18,7 +19,7 @@ export class GetOnboardingStatusUseCase {
         kycApprovedAt: true,
         kycRejectedAt: true,
       },
-    });
+    } as any);
 
     if (!user) {
       throw new Error("User not found");

@@ -25,7 +25,8 @@ export class RegisterPixKeyUseCase {
       throw new Error("User not found");
     }
 
-    if (user.kycStatus !== KycStatus.APPROVED) {
+    const userAny = user as any;
+    if (String(userAny.kycStatus ?? KycStatus.UNVERIFIED) !== KycStatus.APPROVED) {
       throw new Error("KYC not approved");
     }
 
@@ -37,7 +38,8 @@ export class RegisterPixKeyUseCase {
     const normalizedKey = onlyDigits(input.key);
 
     // Validação interna: tipo deve corresponder ao documento do usuário
-    if (!user.documentType || user.documentType !== input.type) {
+    const documentType = userAny.documentType ? String(userAny.documentType) : null;
+    if (!documentType || documentType !== input.type) {
       throw new Error("Pix key type must match user document type");
     }
 

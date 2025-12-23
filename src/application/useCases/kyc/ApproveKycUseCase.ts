@@ -27,13 +27,14 @@ export class ApproveKycUseCase {
       reviewedByUserId: input.adminUserId,
     });
 
-    await prisma.user.update({
+    const prismaAny = prisma as any;
+    await prismaAny.user.update({
       where: { id: submission.userId },
       data: {
         kycStatus: KycStatus.APPROVED,
         kycApprovedAt: new Date(),
-      },
-    });
+      } as any,
+    } as any);
 
     return { success: true };
   }

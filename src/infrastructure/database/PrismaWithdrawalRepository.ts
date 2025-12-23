@@ -36,7 +36,8 @@ const mapWithdrawal = (withdrawal: {
 
 export class PrismaWithdrawalRepository implements WithdrawalRepositoryPort {
   async findById(id: string): Promise<WithdrawalRecord | null> {
-    const withdrawal = await prisma.withdrawal.findUnique({ where: { id } });
+    const prismaAny = prisma as any;
+    const withdrawal = await prismaAny.withdrawal.findUnique({ where: { id } } as any);
     return withdrawal ? mapWithdrawal(withdrawal) : null;
   }
 
@@ -44,16 +45,18 @@ export class PrismaWithdrawalRepository implements WithdrawalRepositoryPort {
     userId: string,
     idempotencyKey: string
   ): Promise<WithdrawalRecord | null> {
-    const withdrawal = await prisma.withdrawal.findUnique({
+    const prismaAny = prisma as any;
+    const withdrawal = await prismaAny.withdrawal.findUnique({
       where: { userId_idempotencyKey: { userId, idempotencyKey } },
-    });
+    } as any);
     return withdrawal ? mapWithdrawal(withdrawal) : null;
   }
 
   async findByTransferaTxId(transferaTxId: string): Promise<WithdrawalRecord | null> {
-    const withdrawal = await prisma.withdrawal.findFirst({
+    const prismaAny = prisma as any;
+    const withdrawal = await prismaAny.withdrawal.findFirst({
       where: { transferaTxId },
-    });
+    } as any);
     return withdrawal ? mapWithdrawal(withdrawal) : null;
   }
 
@@ -68,13 +71,13 @@ export class PrismaWithdrawalRepository implements WithdrawalRepositoryPort {
     }
 
     const [withdrawals, total] = await Promise.all([
-      prisma.withdrawal.findMany({
+      (prisma as any).withdrawal.findMany({
         where,
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
-      }),
-      prisma.withdrawal.count({ where }),
+      } as any),
+      (prisma as any).withdrawal.count({ where } as any),
     ]);
 
     return {
@@ -92,7 +95,8 @@ export class PrismaWithdrawalRepository implements WithdrawalRepositoryPort {
       "createdAt" | "processedAt" | "transferaTxId" | "failureReason"
     >
   ): Promise<WithdrawalRecord> {
-    const created = await prisma.withdrawal.create({
+    const prismaAny = prisma as any;
+    const created = await prismaAny.withdrawal.create({
       data: {
         id: input.id,
         userId: input.userId,
@@ -103,12 +107,13 @@ export class PrismaWithdrawalRepository implements WithdrawalRepositoryPort {
         idempotencyKey: input.idempotencyKey,
         version: input.version,
       },
-    });
+    } as any);
     return mapWithdrawal(created);
   }
 
   async update(withdrawal: WithdrawalRecord): Promise<WithdrawalRecord> {
-    const updated = await prisma.withdrawal.update({
+    const prismaAny = prisma as any;
+    const updated = await prismaAny.withdrawal.update({
       where: { id: withdrawal.id },
       data: {
         amountCents: withdrawal.amountCents,
@@ -121,7 +126,7 @@ export class PrismaWithdrawalRepository implements WithdrawalRepositoryPort {
         processedAt: withdrawal.processedAt,
         version: withdrawal.version,
       },
-    });
+    } as any);
     return mapWithdrawal(updated);
   }
 }

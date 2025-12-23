@@ -19,7 +19,8 @@ const mapPixKey = (pixKey: any): UserPixKeyRecord => ({
 
 export class PrismaUserPixKeyRepository implements UserPixKeyRepositoryPort {
   async findByUserId(userId: string): Promise<UserPixKeyRecord | null> {
-    const pixKey = await prisma.userPixKey.findUnique({
+    const prismaAny = prisma as any;
+    const pixKey = await prismaAny.userPixKey.findUnique({
       where: { userId },
     });
     return pixKey ? mapPixKey(pixKey) : null;
@@ -32,7 +33,8 @@ export class PrismaUserPixKeyRepository implements UserPixKeyRepositoryPort {
     status: string;
     verificationSource?: string | null;
   }): Promise<UserPixKeyRecord> {
-    const created = await prisma.userPixKey.create({
+    const prismaAny = prisma as any;
+    const created = await prismaAny.userPixKey.create({
       data: {
         userId: key.userId,
         type: key.type,
@@ -40,12 +42,13 @@ export class PrismaUserPixKeyRepository implements UserPixKeyRepositoryPort {
         status: key.status,
         verificationSource: key.verificationSource,
       },
-    });
+    } as any);
     return mapPixKey(created);
   }
 
   async update(key: UserPixKeyRecord): Promise<UserPixKeyRecord> {
-    const updated = await prisma.userPixKey.update({
+    const prismaAny = prisma as any;
+    const updated = await prismaAny.userPixKey.update({
       where: { userId: key.userId },
       data: {
         type: key.type,
@@ -56,7 +59,7 @@ export class PrismaUserPixKeyRepository implements UserPixKeyRepositoryPort {
         rejectedAt: key.rejectedAt,
         rejectionReason: key.rejectionReason,
       },
-    });
+    } as any);
     return mapPixKey(updated);
   }
 }

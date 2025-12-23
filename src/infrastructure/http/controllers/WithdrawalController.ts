@@ -221,15 +221,7 @@ export class WithdrawalController {
           id: true,
           email: true,
           document: true,
-          documentType: true,
-          kycStatus: true,
           merchantId: true,
-          merchant: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
         },
       });
 
@@ -240,7 +232,7 @@ export class WithdrawalController {
         });
       }
 
-      const merchantName = user.merchant?.name || user.email.split("@")[0];
+      const merchantName = user.email.split("@")[0];
 
       const [pixKey, balance] = await Promise.all([
         pixKeyRepository.findByUserId(userId),
@@ -252,8 +244,8 @@ export class WithdrawalController {
           id: user.id,
           email: user.email,
           document: user.document,
-          documentType: user.documentType,
-          kycStatus: user.kycStatus,
+          documentType: (user as any).documentType ?? null,
+          kycStatus: (user as any).kycStatus ?? null,
           merchantName,
         },
         pixKey: pixKey

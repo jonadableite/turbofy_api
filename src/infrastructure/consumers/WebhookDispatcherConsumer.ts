@@ -96,7 +96,7 @@ export class WebhookDispatcherConsumer implements EventHandler {
       for (const webhook of webhooks) {
         try {
           // Criar WebhookDelivery (idempotente por unique constraint)
-          const delivery = await prisma.webhookDelivery.upsert({
+          const delivery = await (prisma as any).webhookDelivery.upsert({
             where: {
               webhookId_eventId: {
                 webhookId: webhook.id,
@@ -113,7 +113,7 @@ export class WebhookDispatcherConsumer implements EventHandler {
             update: {
               // Se já existe, não faz nada (idempotência)
             },
-          });
+          } as any);
 
           // Publicar na fila de entrega
           await messaging.publish({

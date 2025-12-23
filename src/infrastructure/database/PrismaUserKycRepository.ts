@@ -21,10 +21,11 @@ const mapSubmission = (submission: any): UserKycSubmissionRecord => ({
 
 export class PrismaUserKycRepository implements UserKycRepositoryPort {
   async findById(submissionId: string): Promise<UserKycSubmissionRecord | null> {
-    const submission = await prisma.userKycSubmission.findUnique({
+    const prismaAny = prisma as any;
+    const submission = await prismaAny.userKycSubmission.findUnique({
       where: { id: submissionId },
       include: { documents: true },
-    });
+    } as any);
     return submission ? mapSubmission(submission) : null;
   }
 
@@ -32,7 +33,8 @@ export class PrismaUserKycRepository implements UserKycRepositoryPort {
     userId: string;
     documents: UserKycDocumentRecord[];
   }): Promise<UserKycSubmissionRecord> {
-    const created = await prisma.userKycSubmission.create({
+    const prismaAny = prisma as any;
+    const created = await prismaAny.userKycSubmission.create({
       data: {
         userId: input.userId,
         status: "PENDING_REVIEW",
@@ -44,17 +46,18 @@ export class PrismaUserKycRepository implements UserKycRepositoryPort {
         },
       },
       include: { documents: true },
-    });
+    } as any);
 
     return mapSubmission(created);
   }
 
   async findLatestByUserId(userId: string): Promise<UserKycSubmissionRecord | null> {
-    const submission = await prisma.userKycSubmission.findFirst({
+    const prismaAny = prisma as any;
+    const submission = await prismaAny.userKycSubmission.findFirst({
       where: { userId },
       orderBy: { createdAt: "desc" },
       include: { documents: true },
-    });
+    } as any);
     return submission ? mapSubmission(submission) : null;
   }
 
@@ -65,7 +68,8 @@ export class PrismaUserKycRepository implements UserKycRepositoryPort {
     reviewedByUserId?: string | null;
     reviewedAt?: Date;
   }): Promise<UserKycSubmissionRecord> {
-    const updated = await prisma.userKycSubmission.update({
+    const prismaAny = prisma as any;
+    const updated = await prismaAny.userKycSubmission.update({
       where: { id: input.submissionId },
       data: {
         status: input.status,
@@ -74,7 +78,7 @@ export class PrismaUserKycRepository implements UserKycRepositoryPort {
         reviewedAt: input.reviewedAt ?? new Date(),
       },
       include: { documents: true },
-    });
+    } as any);
 
     return mapSubmission(updated);
   }

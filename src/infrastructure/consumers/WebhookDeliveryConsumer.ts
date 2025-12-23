@@ -73,11 +73,12 @@ export class WebhookDeliveryConsumer implements EventHandler {
         },
       });
 
+      const prismaAny = prisma as any;
       // Buscar delivery
-      const delivery = await prisma.webhookDelivery.findUnique({
+      const delivery = await prismaAny.webhookDelivery.findUnique({
         where: { id: message.deliveryId },
         include: { webhook: true },
-      });
+      } as any);
 
       if (!delivery) {
         logger.warn({
@@ -112,10 +113,10 @@ export class WebhookDeliveryConsumer implements EventHandler {
           },
         });
 
-        await prisma.webhookDelivery.update({
+        await prismaAny.webhookDelivery.update({
           where: { id: delivery.id },
           data: { status: "FAILED", errorMessage: "Webhook não está ativo" },
-        });
+        } as any);
         return;
       }
 
@@ -196,14 +197,14 @@ export class WebhookDeliveryConsumer implements EventHandler {
 
       if (success) {
         // Atualizar delivery como SUCCESS
-        await prisma.webhookDelivery.update({
+        await (prisma as any).webhookDelivery.update({
           where: { id: delivery.id },
           data: {
             status: "SUCCESS",
             httpStatus: response.status,
             updatedAt: new Date(),
           },
-        });
+        } as any);
 
         // Atualizar webhook (resetar failureCount)
         await prisma.webhook.update({
@@ -284,7 +285,7 @@ export class WebhookDeliveryConsumer implements EventHandler {
     const { delivery, webhook, errorMessage, httpStatus } = params;
 
     // Atualizar delivery
-    await prisma.webhookDelivery.update({
+    await (prisma as any).webhookDelivery.update({
       where: { id: delivery.id },
       data: {
         status: delivery.attempt >= MAX_ATTEMPTS ? "FAILED" : "RETRYING",
@@ -292,7 +293,7 @@ export class WebhookDeliveryConsumer implements EventHandler {
         errorMessage,
         updatedAt: new Date(),
       },
-    });
+    } as any);
 
     // Atualizar webhook (incrementar failureCount)
     const newFailureCount = webhook.failureCount + 1;
@@ -357,10 +358,10 @@ export class WebhookDeliveryConsumer implements EventHandler {
         },
       });
 
-      await prisma.webhookDelivery.update({
+      await (prisma as any).webhookDelivery.update({
         where: { id: delivery.id },
         data: { status: "FAILED" },
-      });
+      } as any);
 
       return;
     }
@@ -373,14 +374,14 @@ export class WebhookDeliveryConsumer implements EventHandler {
     const nextAttemptAt = new Date(Date.now() + delayMs);
 
     // Atualizar delivery com próxima tentativa agendada
-    await prisma.webhookDelivery.update({
+    await (prisma as any).webhookDelivery.update({
       where: { id: delivery.id },
       data: {
         attempt: nextAttempt,
         nextAttemptAt,
         status: "RETRYING",
       },
-    });
+    } as any);
 
     // Re-publicar na fila com delay (usando TTL ou scheduler externo)
     // Por simplicidade, aguardar delay e republicar

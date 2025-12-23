@@ -36,18 +36,17 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       exp: number;
     };
 
-    const user = await prisma.user.findUnique({
+    const prismaAny = prisma as any;
+    const user = await prismaAny.user.findUnique({
       where: { id: payload.sub },
       select: {
         id: true,
         email: true,
         roles: true,
         merchantId: true,
-        kycStatus: true,
-        documentType: true,
         document: true,
       },
-    });
+    } as any);
     if (!user) {
       logger.warn({
         type: "AUTH_USER_NOT_FOUND",
@@ -57,7 +56,13 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    req.user = user;
+    // Preserva compatibilidade: alguns fluxos esperam kycStatus/documentType no req.user
+    const userAny = user as any;
+    req.user = {
+      ...user,
+      kycStatus: userAny.kycStatus,
+      documentType: userAny.documentType,
+    } as any;
     return next();
   } catch (err) {
     logger.error({

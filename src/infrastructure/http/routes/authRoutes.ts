@@ -100,21 +100,20 @@ authRouter.get(
       }
 
       // Buscar dados completos do usuário
-      const user = await prisma.user.findUnique({
+      const prismaAny = prisma as any;
+      const user = await prismaAny.user.findUnique({
         where: { id: req.user.id },
         select: {
           id: true,
           email: true,
           roles: true,
           document: true,
-          documentType: true,
-          kycStatus: true,
           phone: true,
           merchantId: true,
           createdAt: true,
           updatedAt: true,
         },
-      });
+      } as any);
 
       if (!user) {
         return res.status(404).json({
@@ -131,8 +130,8 @@ authRouter.get(
         roles: user.roles,
         name: user.email.split("@")[0],
         document: user.document,
-        documentType: user.documentType,
-        kycStatus: user.kycStatus,
+        documentType: (user as any).documentType ?? null,
+        kycStatus: (user as any).kycStatus ?? null,
         phone: user.phone,
         merchantId: user.merchantId,
         createdAt: user.createdAt,

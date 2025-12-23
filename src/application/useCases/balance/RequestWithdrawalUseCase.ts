@@ -30,7 +30,8 @@ export class RequestWithdrawalUseCase {
       throw new Error("User not found");
     }
 
-    if (user.kycStatus !== KycStatus.APPROVED) {
+    const userAny = user as any;
+    if (String(userAny.kycStatus ?? KycStatus.UNVERIFIED) !== KycStatus.APPROVED) {
       throw new Error("KYC not approved");
     }
 

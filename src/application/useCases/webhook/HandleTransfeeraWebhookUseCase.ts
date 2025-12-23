@@ -1,4 +1,4 @@
-import { WithdrawalRepositoryPort } from "../../../ports/WithdrawalRepositoryPort";
+import { WithdrawalRepositoryPort, WithdrawalRecord } from "../../../ports/WithdrawalRepositoryPort";
 import { UserLedgerRepositoryPort } from "../../../ports/UserLedgerRepositoryPort";
 import { WithdrawalStatus } from "../../../domain/entities/WithdrawalStatus";
 import { LedgerEntryStatus, LedgerEntryType } from "../../../domain/entities/LedgerEntryType";
@@ -94,14 +94,7 @@ export class HandleTransfeeraWebhookUseCase {
     );
   }
 
-  private async handleSuccess(
-    withdrawal: {
-      id: string;
-      userId: string;
-      status: WithdrawalStatus;
-      [key: string]: unknown;
-    }
-  ): Promise<void> {
+  private async handleSuccess(withdrawal: WithdrawalRecord): Promise<void> {
     logger.info(
       { withdrawalId: withdrawal.id },
       "Marking withdrawal as completed via webhook"
@@ -138,12 +131,7 @@ export class HandleTransfeeraWebhookUseCase {
   }
 
   private async handleFailure(
-    withdrawal: {
-      id: string;
-      userId: string;
-      status: WithdrawalStatus;
-      [key: string]: unknown;
-    },
+    withdrawal: WithdrawalRecord,
     reason: string
   ): Promise<void> {
     logger.warn(
@@ -182,13 +170,7 @@ export class HandleTransfeeraWebhookUseCase {
     );
   }
 
-  private async handleProcessing(
-    withdrawal: {
-      id: string;
-      status: WithdrawalStatus;
-      [key: string]: unknown;
-    }
-  ): Promise<void> {
+  private async handleProcessing(withdrawal: WithdrawalRecord): Promise<void> {
     // Se ainda está em REQUESTED, mudar para PROCESSING
     if (withdrawal.status === WithdrawalStatus.REQUESTED) {
       logger.info(

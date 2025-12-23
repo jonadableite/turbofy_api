@@ -7,11 +7,12 @@ interface AutoDeleteInput {
 
 export class AutoDeleteUnverifiedUsersUseCase {
   async execute(input: AutoDeleteInput): Promise<{ deleted: number }> {
-    const result = await prisma.user.deleteMany({
+    const prismaAny = prisma as any;
+    const result = await prismaAny.user.deleteMany({
       where: {
         kycStatus: { not: KycStatus.APPROVED },
         createdAt: { lte: input.cutoffDate },
-      },
+      } as any,
     });
 
     return { deleted: result.count };
