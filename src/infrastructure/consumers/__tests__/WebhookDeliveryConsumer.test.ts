@@ -1,12 +1,37 @@
 /**
  * Testes unitários: WebhookDeliveryConsumer
- * 
- * Valida lógica de retry com backoff/jitter
+ *
+ * Valida lógica de retry com backoff/jitter e roteamento
  */
 
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect, jest, beforeEach, afterEach } from "@jest/globals";
+import { WebhookDeliveryConsumer } from "../WebhookDeliveryConsumer";
+
+jest.mock("../../database/prismaClient", () => ({
+  prisma: {
+    webhookDelivery: {
+      update: jest.fn().mockResolvedValue(null),
+    },
+  },
+}));
+
+const publishMock = jest.fn().mockResolvedValue(undefined);
+jest.mock("../../adapters/messaging/MessagingFactory", () => ({
+  MessagingFactory: {
+    create: () => ({ publish: publishMock }),
+  },
+}));
 
 describe("WebhookDeliveryConsumer", () => {
+  beforeEach(() => {
+    publishMock.mockClear();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   describe("calculateBackoff - Backoff com jitter", () => {
     const RETRY_DELAYS_MS = [0, 2_000, 10_000, 60_000, 300_000];
     const JITTER_FACTOR = 0.1;
@@ -73,6 +98,44 @@ describe("WebhookDeliveryConsumer", () => {
 
     it("should disable exactly at threshold", () => {
       expect(shouldDisableWebhook(MAX_FAILURES_FOR_DISABLE)).toBe(true);
+    });
+  });
+
+  describe("routing key no retry", () => {
+    it("deve republicar delivery com routingKey compatível com webhook.delivery.#", async () => {
+      const consumer = new WebhookDeliveryConsumer() as unknown as {
+        scheduleRetry: (args: any) => Promise<void>;
+      };
+
+      const delivery = {
+        id: "del-1",
+        attempt: 1,
+        webhookId: "wh-1",
+      };
+
+      const message = {
+        deliveryId: "del-1",
+        webhookId: "wh-1",
+        eventEnvelope: {
+          id: "evt-1",
+          type: "webhook.test",
+          merchantId: "merchant-1",
+          timestamp: new Date().toISOString(),
+          data: {},
+        },
+      };
+
+      // @ts-expect-error acesso para teste
+      await consumer.scheduleRetry({ delivery, message });
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+
+      expect(publishMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          routingKey: "webhook.delivery.del-1",
+          type: "webhook.delivery",
+        })
+      );
     });
   });
 });

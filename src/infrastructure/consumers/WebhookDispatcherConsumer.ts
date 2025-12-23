@@ -121,7 +121,7 @@ export class WebhookDispatcherConsumer implements EventHandler {
             type: "webhook.delivery",
             timestamp: new Date().toISOString(),
             version: "v1",
-            routingKey: `turbofy.webhooks.delivery.${delivery.id}`,
+            routingKey: `webhook.delivery.${delivery.id}`,
             payload: {
               deliveryId: delivery.id,
               webhookId: webhook.id,

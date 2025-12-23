@@ -7,7 +7,7 @@
   "scripts": {
     "postinstall": "npm run prisma:generate",
     "predev": "npm run prisma:generate",
-    "dev": "nodemon",
+    "dev": "pnpm exec nodemon",
     "build": "npm run prisma:generate && tsc -p tsconfig.build.json",
     "build:docker": "node scripts/build-docker.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
