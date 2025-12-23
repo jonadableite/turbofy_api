@@ -438,25 +438,85 @@ rifeiroRouter.get("/dashboard", async (req: Request, res: Response) => {
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [splitsToday, splitsWeek, splitsMonth, settlementsToday, settlementsWeek, settlementsMonth, wallet] = await Promise.all([
-      prisma.chargeSplit.aggregate({
+    // Observação: para RIFEIRO, `ChargeSplit.merchantId` normalmente aponta para os produtores (comissões),
+    // então usar chargeSplit aqui deixa os cards sempre em 0. Esses cards representam "total processado".
+    // Calculamos valor líquido (charge - fees) para refletir o faturamento real do Rifeiro.
+    const [chargesToday, chargesWeek, chargesMonth, feesToday, feesWeek, feesMonth, settlementsToday, settlementsWeek, settlementsMonth, wallet, totalPaidGross, totalPaidFees] = await Promise.all([
+      // Charges pagas hoje
+      prisma.charge.aggregate({
         where: {
           merchantId,
-          charge: { status: "PAID", paidAt: { gte: todayStart } },
+          status: "PAID",
+          OR: [
+            { paidAt: { gte: todayStart } },
+            { AND: [{ paidAt: null }, { createdAt: { gte: todayStart } }] },
+          ],
         },
         _sum: { amountCents: true },
       }),
-      prisma.chargeSplit.aggregate({
+      // Charges pagas esta semana
+      prisma.charge.aggregate({
         where: {
           merchantId,
-          charge: { status: "PAID", paidAt: { gte: weekStart } },
+          status: "PAID",
+          OR: [
+            { paidAt: { gte: weekStart } },
+            { AND: [{ paidAt: null }, { createdAt: { gte: weekStart } }] },
+          ],
         },
         _sum: { amountCents: true },
       }),
-      prisma.chargeSplit.aggregate({
+      // Charges pagas este mês
+      prisma.charge.aggregate({
         where: {
           merchantId,
-          charge: { status: "PAID", paidAt: { gte: monthStart } },
+          status: "PAID",
+          OR: [
+            { paidAt: { gte: monthStart } },
+            { AND: [{ paidAt: null }, { createdAt: { gte: monthStart } }] },
+          ],
+        },
+        _sum: { amountCents: true },
+      }),
+      // Fees hoje
+      prisma.fee.aggregate({
+        where: {
+          charge: {
+            merchantId,
+            status: "PAID",
+            OR: [
+              { paidAt: { gte: todayStart } },
+              { AND: [{ paidAt: null }, { createdAt: { gte: todayStart } }] },
+            ],
+          },
+        },
+        _sum: { amountCents: true },
+      }),
+      // Fees esta semana
+      prisma.fee.aggregate({
+        where: {
+          charge: {
+            merchantId,
+            status: "PAID",
+            OR: [
+              { paidAt: { gte: weekStart } },
+              { AND: [{ paidAt: null }, { createdAt: { gte: weekStart } }] },
+            ],
+          },
+        },
+        _sum: { amountCents: true },
+      }),
+      // Fees este mês
+      prisma.fee.aggregate({
+        where: {
+          charge: {
+            merchantId,
+            status: "PAID",
+            OR: [
+              { paidAt: { gte: monthStart } },
+              { AND: [{ paidAt: null }, { createdAt: { gte: monthStart } }] },
+            ],
+          },
         },
         _sum: { amountCents: true },
       }),
@@ -487,6 +547,15 @@ rifeiroRouter.get("/dashboard", async (req: Request, res: Response) => {
       prisma.wallet.findUnique({
         where: { merchantId },
         select: { availableBalanceCents: true, pendingBalanceCents: true },
+      }),
+      // Fallback para dados históricos (antes de existir wallet): total líquido acumulado = gross - fees
+      prisma.charge.aggregate({
+        where: { merchantId, status: "PAID" },
+        _sum: { amountCents: true },
+      }),
+      prisma.fee.aggregate({
+        where: { charge: { merchantId, status: "PAID" } },
+        _sum: { amountCents: true },
       }),
     ]);
 
@@ -519,19 +588,31 @@ rifeiroRouter.get("/dashboard", async (req: Request, res: Response) => {
       };
     });
 
+    // Calcular valores líquidos (gross - fees) por período
+    const todayNet = (chargesToday._sum.amountCents ?? 0) - (feesToday._sum.amountCents ?? 0);
+    const weekNet = (chargesWeek._sum.amountCents ?? 0) - (feesWeek._sum.amountCents ?? 0);
+    const monthNet = (chargesMonth._sum.amountCents ?? 0) - (feesMonth._sum.amountCents ?? 0);
+
     return res.json({
       splits: {
-        today: splitsToday._sum.amountCents ?? 0,
-        week: splitsWeek._sum.amountCents ?? 0,
-        month: splitsMonth._sum.amountCents ?? 0,
+        today: todayNet,
+        week: weekNet,
+        month: monthNet,
       },
       settlements: {
         today: settlementsToday._sum.amountCents ?? 0,
         week: settlementsWeek._sum.amountCents ?? 0,
         month: settlementsMonth._sum.amountCents ?? 0,
       },
+      // NOTE: `wallet` pode não existir para dados históricos (antes do deploy). Nesse caso, calculamos um fallback.
       wallet: {
-        availableCents: wallet?.availableBalanceCents ?? 0,
+        availableCents:
+          wallet?.availableBalanceCents ??
+          Math.max(
+            0,
+            (totalPaidGross._sum.amountCents ?? 0) -
+              (totalPaidFees._sum.amountCents ?? 0)
+          ),
         pendingCents: wallet?.pendingBalanceCents ?? 0,
       },
       recentCharges: chargesWithNet,

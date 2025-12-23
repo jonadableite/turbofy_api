@@ -27,23 +27,30 @@ import { RabbitMQMessagingAdapter } from "./infrastructure/adapters/messaging/Ra
 import { startChargeExpiredConsumer } from "./infrastructure/consumers/ChargeExpiredConsumer";
 import { startChargePaidConsumer } from "./infrastructure/consumers/ChargePaidConsumer";
 import { startDocumentValidationConsumer } from "./infrastructure/consumers/DocumentValidationConsumer";
+import { startWebhookDeliveryConsumer } from "./infrastructure/consumers/WebhookDeliveryConsumer";
+import { startWebhookDispatcherConsumer } from "./infrastructure/consumers/WebhookDispatcherConsumer";
 import { adminRouter } from "./infrastructure/http/routes/adminRoutes";
 import { affiliatesRouter } from "./infrastructure/http/routes/affiliatesRoutes";
 import { apiKeysRouter } from "./infrastructure/http/routes/apiKeysRoutes";
 import { apiRouter } from "./infrastructure/http/routes/apiRoutes";
 import { authRouter } from "./infrastructure/http/routes/authRoutes";
+import { balanceRouter } from "./infrastructure/http/routes/balanceRoutes";
 import { chargesRouter } from "./infrastructure/http/routes/chargesRoutes";
 import { checkoutRouter } from "./infrastructure/http/routes/checkoutRoutes";
 import { commissionRouter } from "./infrastructure/http/routes/commissionRoutes";
 import { couponsRouter } from "./infrastructure/http/routes/couponsRoutes";
 import { dashboardRouter } from "./infrastructure/http/routes/dashboardRoutes";
 import { domainConfigRouter } from "./infrastructure/http/routes/domainConfigRoutes";
+import { integrationsWebhooksRouter } from "./infrastructure/http/routes/integrationsWebhooksRoutes";
+import { kycRouter } from "./infrastructure/http/routes/kycRoutes";
 import { onboardingRouter } from "./infrastructure/http/routes/onboardingRoutes";
+import { pixKeyRouter } from "./infrastructure/http/routes/pixKeyRoutes";
 import { producerSplitsRouter } from "./infrastructure/http/routes/producerSplitsRoutes";
 import { productCheckoutRouter } from "./infrastructure/http/routes/productCheckoutRoutes";
 import { productsRouter } from "./infrastructure/http/routes/productsRoutes";
 import { reconciliationsRouter } from "./infrastructure/http/routes/reconciliationsRoutes";
 import { rifeiroRouter } from "./infrastructure/http/routes/rifeiroRoutes";
+import { rifeiroSaquesRouter } from "./infrastructure/http/routes/rifeiroSaquesRoutes";
 import { rifeiroWebhookRouter } from "./infrastructure/http/routes/rifeiroWebhookRoutes";
 import { settlementsRouter } from "./infrastructure/http/routes/settlementsRoutes";
 import { studioRouter } from "./infrastructure/http/routes/studioRoutes";
@@ -51,10 +58,17 @@ import { transfeeraWebhookRouter } from "./infrastructure/http/routes/transfeera
 import { uploadRouter } from "./infrastructure/http/routes/uploadRoutes";
 import { videoRouter } from "./infrastructure/http/routes/videoRoutes";
 import { webhooksRouter } from "./infrastructure/http/routes/webhooksRoutes";
+import { withdrawalRouter } from "./infrastructure/http/routes/withdrawalRoutes";
 import { setupSwagger } from "./infrastructure/http/swagger";
-import { logger } from "./infrastructure/logger";
+import makeLogger, { pinoLogger } from "./infrastructure/logger/logger";
 
 const app = express();
+const logger = makeLogger();
+
+// Trust proxy para funcionar corretamente atrás de Cloudflare/NGINX
+// Configurar para confiar apenas no primeiro proxy (mais seguro para rate limiting)
+// Isso permite que req.ip funcione corretamente sem permitir bypass do rate limiting
+app.set('trust proxy', 1); // Confiar apenas no primeiro proxy (Cloudflare/NGINX)
 
 // Configurar CORS corretamente para múltiplas origens
 const corsOrigin = process.env.CORS_ORIGIN || "*";
@@ -108,6 +122,22 @@ app.use(
 );
 
 app.use(cookieParser());
+
+// Middleware para capturar rawBody para webhooks (deve vir antes de express.json())
+// Necessário para validar assinatura HMAC dos webhooks
+app.use('/webhooks/transfeera', express.raw({ type: 'application/json' }), (req, res, next) => {
+  // Salvar rawBody antes do parsing
+  (req as any).rawBody = req.body;
+  // Converter para JSON para o próximo middleware
+  try {
+    req.body = JSON.parse(req.body.toString('utf8'));
+  } catch (e) {
+    // Se falhar, deixar body vazio
+    req.body = {};
+  }
+  next();
+});
+
 app.use(express.json());
 
 // Otimizar logs HTTP - reduzir verbosidade drasticamente
@@ -119,7 +149,7 @@ const LOG_CACHE_TTL = 5000; // 5 segundos
 const MAX_DUPLICATE_LOGS = 3; // Máximo de logs duplicados antes de suprimir
 
 app.use(pinoHttp({ 
-  logger,
+  logger: pinoLogger,
   // Reduzir logs em desenvolvimento para evitar sobrecarga
   autoLogging: isDevelopment ? {
     ignore: (req) => {
@@ -238,12 +268,22 @@ app.use('/onboarding', onboardingRouter);
 app.use('/admin', adminRouter);
 app.use('/api-keys', apiKeysRouter);
 app.use('/webhooks', webhooksRouter);
+app.use('/integrations/webhooks', integrationsWebhooksRouter); // Webhooks para integradores (client credentials)
+app.use('/kyc', kycRouter);
+app.use('/pix-key', pixKeyRouter);
+app.use('/balance', balanceRouter);
+app.use('/withdrawals', withdrawalRouter);
 app.use('/coupons', couponsRouter);
 app.use('/rifeiro/webhooks', rifeiroWebhookRouter);
 app.use('/rifeiro', rifeiroRouter);
+app.use('/rifeiro/saques', rifeiroSaquesRouter);
 // Producer splits deve vir antes da rota genérica para não ser interceptada
 app.use('/producer/splits', producerSplitsRouter);
-logger.info('[ROUTES] Producer splits router registrado em /producer/splits');
+logger.info({
+  type: "ROUTES_REGISTERED",
+  message: "Producer splits router registrado em /producer/splits",
+  payload: { route: "/producer/splits" },
+});
 // ProductCheckout routes (builder de checkout personalizado)
 app.use('/product-checkouts', productCheckoutRouter);
 // Rotas públicas de checkout (/c/:slug e /c/:slug/pay) - deve ser a última
@@ -265,16 +305,27 @@ app.get('/metrics', async (_req, res) => {
 // Swagger docs
 try {
   setupSwagger(app);
-  logger.info('[SWAGGER] Swagger configurado com sucesso');
+  logger.info({
+    type: "SWAGGER_READY",
+    message: "Swagger configurado com sucesso",
+  });
 } catch (err) {
-  logger.error({ err }, '[SWAGGER] Erro ao configurar Swagger');
+  logger.error({
+    type: "SWAGGER_ERROR",
+    message: "Erro ao configurar Swagger",
+    error: err,
+  });
   console.error(chalk.red(`\n⚠️  Aviso: Erro ao configurar Swagger: ${err instanceof Error ? err.message : 'Erro desconhecido'}\n`));
   // Não interrompe o servidor se o Swagger falhar
 }
 
 const PORT = Number(env.PORT);
 const HTTPS_PORT = Number(env.HTTPS_PORT);
-logger.info({ port: PORT, httpsEnabled: env.HTTPS_ENABLED, httpsPort: HTTPS_PORT }, '[SERVER] Iniciando servidor na porta');
+logger.info({
+  type: "SERVER_STARTING",
+  message: "Iniciando servidor HTTP",
+  payload: { port: PORT, httpsEnabled: env.HTTPS_ENABLED, httpsPort: HTTPS_PORT },
+});
 
 const bootstrap = async () => {
   try {
@@ -297,6 +348,8 @@ const bootstrap = async () => {
     let chargePaidConsumer: Awaited<ReturnType<typeof startChargePaidConsumer>> | null = null;
     let chargeExpiredConsumer: Awaited<ReturnType<typeof startChargeExpiredConsumer>> | null = null;
     let documentValidationConsumer: Awaited<ReturnType<typeof startDocumentValidationConsumer>> | null = null;
+    let webhookDispatcherConsumer: Awaited<ReturnType<typeof startWebhookDispatcherConsumer>> | null = null;
+    let webhookDeliveryConsumer: Awaited<ReturnType<typeof startWebhookDeliveryConsumer>> | null = null;
 
     if (env.NODE_ENV !== "test") {
       try {
@@ -304,15 +357,27 @@ const bootstrap = async () => {
         const rabbitMQAdapter = new RabbitMQMessagingAdapter();
         await rabbitMQAdapter.initialize();
         await rabbitMQAdapter.close();
-        logger.info("RabbitMQ queues initialized");
+        logger.info({
+          type: "RABBITMQ_READY",
+          message: "RabbitMQ queues inicializadas",
+        });
 
         chargePaidConsumer = await startChargePaidConsumer();
         chargeExpiredConsumer = await startChargeExpiredConsumer();
         documentValidationConsumer = await startDocumentValidationConsumer();
-        logger.info("RabbitMQ consumers initialized");
+        webhookDispatcherConsumer = await startWebhookDispatcherConsumer();
+        webhookDeliveryConsumer = await startWebhookDeliveryConsumer();
+        logger.info({
+          type: "RABBITMQ_CONSUMERS_READY",
+          message: "RabbitMQ consumers inicializados",
+        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        logger.warn({ error: errorMessage }, "Failed to initialize RabbitMQ consumers, continuing without them");
+        logger.warn({
+          type: "RABBITMQ_CONSUMERS_SKIPPED",
+          message: "Falha ao inicializar consumidores RabbitMQ, continuando sem eles",
+          payload: { error: errorMessage },
+        });
       }
     }
 
@@ -325,11 +390,20 @@ const bootstrap = async () => {
         
         httpsServer = https.createServer({ cert, key }, app);
         httpsServer.listen(HTTPS_PORT, "0.0.0.0", () => {
-          logger.info({ port: HTTPS_PORT }, '[HTTPS] Servidor HTTPS iniciado');
+          logger.info({
+            type: "HTTPS_START",
+            message: "Servidor HTTPS iniciado",
+            payload: { port: HTTPS_PORT },
+          });
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        logger.error({ error: errorMessage, certPath: env.HTTPS_CERT_PATH, keyPath: env.HTTPS_KEY_PATH }, '[HTTPS] Erro ao iniciar servidor HTTPS');
+        logger.error({
+          type: "HTTPS_ERROR",
+          message: "Erro ao iniciar servidor HTTPS",
+          error,
+          payload: { error: errorMessage, certPath: env.HTTPS_CERT_PATH, keyPath: env.HTTPS_KEY_PATH },
+        });
         console.error(chalk.red(`\n⚠️  Aviso: Erro ao iniciar HTTPS: ${errorMessage}\n`));
         console.error(chalk.yellow('Certifique-se de que os certificados existem e os caminhos estão corretos.\n'));
       }
@@ -364,27 +438,44 @@ const bootstrap = async () => {
       console.log(chalk.cyan('═'.repeat(60)));
       console.log(chalk.green.bold('  [READY] Servidor pronto para receber requisições!\n'));
 
-      logger.info('[STARTED] Turbofy API iniciada com sucesso');
+      logger.info({
+        type: "SERVER_STARTED",
+        message: "Turbofy API iniciada com sucesso",
+        payload: { port: PORT, httpsEnabled: env.HTTPS_ENABLED, httpsPort: HTTPS_PORT },
+      });
     });
 
     // Tratamento de erros do servidor
     server.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
-        logger.error(`[ERROR] Porta ${PORT} já está em uso. Tente usar outra porta.`);
+        logger.error({
+          type: "SERVER_PORT_IN_USE",
+          message: `Porta ${PORT} já está em uso. Tente usar outra porta.`,
+          error: err,
+          payload: { port: PORT },
+        });
         console.error(chalk.red(`\n❌ Erro: Porta ${PORT} já está em uso!\n`));
         console.error(chalk.yellow('Soluções:'));
         console.error(chalk.white('  1. Pare o processo que está usando a porta 3000'));
         console.error(chalk.white('  2. Ou altere a variável PORT no arquivo .env\n'));
         process.exit(1);
       } else {
-        logger.error({ err }, '[ERROR] Erro ao iniciar servidor');
+        logger.error({
+          type: "SERVER_START_ERROR",
+          message: "Erro ao iniciar servidor",
+          error: err,
+        });
         console.error(chalk.red(`\n❌ Erro ao iniciar servidor: ${err.message}\n`));
         process.exit(1);
       }
     });
 
     const shutdown = async (signal: NodeJS.Signals) => {
-      logger.info(`[SHUTDOWN] Recebido ${signal}, encerrando servidor...`);
+      logger.info({
+        type: "SERVER_SHUTDOWN_REQUESTED",
+        message: "Encerrando servidor por sinal recebido",
+        payload: { signal },
+      });
       await Promise.all([
         chargePaidConsumer?.stop(),
         chargeExpiredConsumer?.stop(),
@@ -397,7 +488,10 @@ const bootstrap = async () => {
       }
       
       await Promise.all(closePromises);
-      logger.info('[SHUTDOWN] Servidor encerrado');
+      logger.info({
+        type: "SERVER_SHUTDOWN_COMPLETE",
+        message: "Servidor encerrado",
+      });
       process.exit(0);
     };
 
@@ -426,7 +520,11 @@ const bootstrap = async () => {
     }).catch(() => {});
     // #endregion
 
-    logger.error({ err }, '[ERROR] Erro fatal ao inicializar servidor');
+    logger.error({
+      type: "SERVER_FATAL_ERROR",
+      message: "Erro fatal ao inicializar servidor",
+      error: err,
+    });
     console.error(chalk.red(`\n❌ Erro fatal: ${err instanceof Error ? err.message : 'Erro desconhecido'}\n`));
     process.exit(1);
   }
@@ -434,9 +532,14 @@ const bootstrap = async () => {
 
 if (process.env.NODE_ENV !== "test") {
   bootstrap().catch((err) => {
-    logger.error({ err }, '[ERROR] Bootstrap falhou');
+    logger.error({
+      type: "SERVER_BOOTSTRAP_FAILED",
+      message: "Bootstrap falhou",
+      error: err,
+    });
     process.exit(1);
   });
 }
 
 export { app };
+

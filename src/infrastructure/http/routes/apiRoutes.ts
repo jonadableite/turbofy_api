@@ -4,21 +4,19 @@
  */
 
 import { Router, Request, Response } from 'express';
-import rateLimit from 'express-rate-limit';
 import { generateCsrfToken } from '../../security/csrf';
 import { logger } from '../../logger';
 import { adminRouter } from './adminRoutes';
+import { createSecureRateLimiter } from '../utils/rateLimitHelper';
 
 const apiRouter = Router();
 
 // Rate limiter para endpoints da API - mais permissivo em desenvolvimento
 const isDevelopment = process.env.NODE_ENV === 'development';
-const apiLimiter = rateLimit({
+const apiLimiter = createSecureRateLimiter({
   windowMs: 1 * 60 * 1000, // 1 minuto
   max: isDevelopment ? 100 : 20, // 100 req/min em dev, 20 em produção
   message: 'Too many requests, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
   // Skip rate limiting para localhost em desenvolvimento
   skip: (req) => {
     if (isDevelopment) {

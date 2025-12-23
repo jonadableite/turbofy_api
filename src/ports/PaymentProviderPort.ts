@@ -9,6 +9,7 @@ export interface PixIssueOutput {
   qrCode: string;
   copyPaste: string;
   expiresAt: Date;
+  txid?: string; // TXID retornado pelo provedor de pagamento (Transfeera)
 }
 
 export interface BoletoIssueInput {

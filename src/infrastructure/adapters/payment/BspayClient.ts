@@ -18,12 +18,14 @@ export class BspayClient {
     return { available, waiting }
   }
 
-  async createPixQrcode(accessToken: string, payload: { amount: number; external_id?: string; payer?: { name?: string; document?: string; email?: string }; postbackUrl?: string }): Promise<{ qrCode: string; copyPaste: string; expiresAt: Date }> {
+  async createPixQrcode(accessToken: string, payload: { amount: number; external_id?: string; payer?: { name?: string; document?: string; email?: string }; postbackUrl?: string }): Promise<{ qrCode: string; copyPaste: string; expiresAt: Date; txid?: string }> {
     const res = await axios.post(`${this.baseUrl}/v2/pix/qrcode`, payload, { headers: { Authorization: `Bearer ${accessToken}` } })
     const qrCode = res.data?.qrcode ?? res.data?.qr_code_base64 ?? res.data?.qrCode
     const copyPaste = res.data?.copyPaste ?? res.data?.payload ?? res.data?.code
     const expires = res.data?.expires_at ?? res.data?.expiresAt
     const expiresAt = expires ? new Date(expires) : new Date(Date.now() + 30 * 60 * 1000)
-    return { qrCode, copyPaste, expiresAt }
+    // BSPay pode retornar txid, id ou transaction_id
+    const txid = res.data?.txid ?? res.data?.id ?? res.data?.transaction_id ?? undefined
+    return { qrCode, copyPaste, expiresAt, txid }
   }
 }

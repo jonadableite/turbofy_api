@@ -100,7 +100,7 @@ export class Charge {
   }
 
   // ✨ Immutable helpers to enrich charge with payment data
-  withPixData(qrCode: string, copyPaste: string): Charge {
+  withPixData(qrCode: string, copyPaste: string, txid?: string): Charge {
     return new Charge({
       id: this.id,
       merchantId: this.merchantId,
@@ -115,6 +115,7 @@ export class Charge {
       metadata: this.metadata,
       pixQrCode: qrCode,
       pixCopyPaste: copyPaste,
+      pixTxid: txid,
       boletoUrl: this.boletoUrl,
       createdAt: this.createdAt,
       updatedAt: new Date(),

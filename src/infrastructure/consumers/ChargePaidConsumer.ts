@@ -7,23 +7,21 @@
  * @performance Processamento assíncrono via RabbitMQ
  */
 
+import { CreditWalletOnPayment } from "../../application/useCases/CreditWalletOnPayment";
 import { DispatchWebhooks } from "../../application/useCases/DispatchWebhooks";
 import { ProcessPixWebhook } from "../../application/useCases/ProcessPixWebhook";
 import { MessagingFactory } from "../adapters/messaging/MessagingFactory";
 import { EventHandler, RabbitMQConsumer } from "../adapters/messaging/RabbitMQConsumer";
-import { FetchWebhookDeliveryAdapter } from "../adapters/webhooks/FetchWebhookDeliveryAdapter";
 import { PrismaChargeRepository } from "../database/PrismaChargeRepository";
-import { prisma } from "../database/prismaClient";
 import { PrismaEnrollmentRepository } from "../database/repositories/PrismaEnrollmentRepository";
 import { PrismaPaymentInteractionRepository } from "../database/repositories/PrismaPaymentInteractionRepository";
-import { PrismaWebhookLogRepository } from "../database/repositories/PrismaWebhookLogRepository";
-import { PrismaWebhookRepository } from "../database/repositories/PrismaWebhookRepository";
 import { logger } from "../logger";
 
 export class ChargePaidConsumer implements EventHandler {
   private processPixWebhook: ProcessPixWebhook;
   private chargeRepository: PrismaChargeRepository;
   private dispatchWebhooks: DispatchWebhooks;
+  private creditWallet: CreditWalletOnPayment;
 
   constructor() {
     const chargeRepository = new PrismaChargeRepository();
@@ -38,14 +36,11 @@ export class ChargePaidConsumer implements EventHandler {
       messaging
     );
 
-    const webhookRepository = new PrismaWebhookRepository(prisma);
-    const webhookLogRepository = new PrismaWebhookLogRepository(prisma);
-    const webhookDelivery = new FetchWebhookDeliveryAdapter();
-    this.dispatchWebhooks = new DispatchWebhooks(
-      webhookRepository,
-      webhookLogRepository,
-      webhookDelivery
-    );
+    // DispatchWebhooks agora usa apenas messaging (refatorado para async)
+    this.dispatchWebhooks = new DispatchWebhooks(messaging);
+
+    // CreditWalletOnPayment para atualizar saldo da carteira
+    this.creditWallet = new CreditWalletOnPayment();
 
     this.chargeRepository = chargeRepository;
   }
@@ -59,7 +54,11 @@ export class ChargePaidConsumer implements EventHandler {
 
       const chargeId = parsed.payload?.chargeId;
       if (!chargeId) {
-        logger.warn({ event }, "charge.paid event without payload.chargeId");
+      logger.warn({
+        type: "CHARGE_PAID_MISSING_ID",
+        message: "charge.paid event without payload.chargeId",
+        payload: { event },
+      });
         return;
       }
 
@@ -69,20 +68,47 @@ export class ChargePaidConsumer implements EventHandler {
       });
 
       if (result.enrollmentCreated) {
-        logger.info(
-          {
+        logger.info({
+          type: "CHARGE_PAID_ENROLLMENT_CREATED",
+          message: "Enrollment created from charge.paid event",
+          payload: {
             chargeId,
             enrollmentId: result.enrollmentId,
           },
-          "Enrollment created from charge.paid event"
-        );
+        });
       } else {
-        logger.info(
-          {
-            chargeId,
-          },
-          "No enrollment created (not a course charge or already exists)"
-        );
+        logger.info({
+          type: "CHARGE_PAID_NO_ENROLLMENT",
+          message: "No enrollment created (not a course charge or already exists)",
+          payload: { chargeId },
+        });
+      }
+
+      // Creditar wallet do merchant (não bloquear o processamento principal)
+      try {
+        const walletResult = await this.creditWallet.execute({
+          chargeId,
+          traceId: parsed.traceId,
+        });
+
+        if (walletResult.walletCredited) {
+          logger.info({
+            type: "CHARGE_PAID_WALLET_CREDITED",
+            message: "Wallet credited on payment",
+            payload: {
+              chargeId,
+              merchantId: walletResult.merchantId,
+              amountCreditedCents: walletResult.amountCreditedCents,
+            },
+          });
+        }
+      } catch (err) {
+        logger.error({
+          type: "CHARGE_PAID_WALLET_CREDIT_FAILED",
+          message: "Failed to credit wallet on payment (non-blocking)",
+          error: err,
+          payload: { chargeId },
+        });
       }
 
       // Disparar webhooks do Turbofy para o integrador (não bloquear o processamento principal)
@@ -110,20 +136,21 @@ export class ChargePaidConsumer implements EventHandler {
           },
         });
       } catch (err) {
-        logger.error(
-          { err, chargeId },
-          "Failed to dispatch webhooks for charge.paid (non-blocking)"
-        );
+        logger.error({
+          type: "CHARGE_PAID_WEBHOOK_FAILED",
+          message: "Failed to dispatch webhooks for charge.paid (non-blocking)",
+          error: err,
+          payload: { chargeId },
+        });
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      logger.error(
-        {
-          error: errorMessage,
-          event,
-        },
-        "Failed to process charge.paid event"
-      );
+      logger.error({
+        type: "CHARGE_PAID_PROCESS_ERROR",
+        message: "Failed to process charge.paid event",
+        error,
+        payload: { error: errorMessage, event },
+      });
       throw error;
     }
   }
@@ -133,13 +160,24 @@ export class ChargePaidConsumer implements EventHandler {
  * Inicializa o consumer de charge.paid
  */
 export async function startChargePaidConsumer(): Promise<RabbitMQConsumer> {
-  const consumer = new RabbitMQConsumer();
+  // Configurar binding para a fila de charge.paid
+  const consumer = new RabbitMQConsumer([
+    {
+      eventType: "charge.paid",
+      queueName: "turbofy.payments.charge.paid",
+    },
+  ]);
+  
   const handler = new ChargePaidConsumer();
 
   consumer.registerHandler("charge.paid", handler);
   await consumer.start();
 
-  logger.info("ChargePaidConsumer started");
+  logger.info({
+    type: "CHARGE_PAID_CONSUMER_STARTED",
+    message: "ChargePaidConsumer started",
+    queue: "turbofy.payments.charge.paid",
+  });
 
   return consumer;
 }

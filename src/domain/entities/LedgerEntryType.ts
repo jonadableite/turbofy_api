@@ -1,0 +1,13 @@
+export enum LedgerEntryType {
+  CHARGE_NET = "CHARGE_NET",
+  REFUND = "REFUND",
+  WITHDRAWAL_DEBIT = "WITHDRAWAL_DEBIT",
+  WITHDRAWAL_FEE = "WITHDRAWAL_FEE",
+}
+
+export enum LedgerEntryStatus {
+  PENDING = "PENDING",
+  POSTED = "POSTED",
+  CANCELED = "CANCELED",
+}
+

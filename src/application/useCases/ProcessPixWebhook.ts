@@ -38,31 +38,31 @@ export class ProcessPixWebhook {
     const charge = await this.chargeRepository.findById(input.chargeId);
 
     if (!charge) {
-      logger.warn({ chargeId: input.chargeId }, "Charge not found for webhook");
+      logger.warn({
+        type: "PIX_WEBHOOK_CHARGE_NOT_FOUND",
+        message: "Charge not found for webhook",
+        payload: { chargeId: input.chargeId },
+      });
       throw new Error(`Charge ${input.chargeId} not found`);
     }
 
     if (charge.status !== "PAID") {
-      logger.warn(
-        {
-          chargeId: input.chargeId,
-          status: charge.status,
-        },
-        "Charge is not in PAID status"
-      );
+      logger.warn({
+        type: "PIX_WEBHOOK_INVALID_STATUS",
+        message: "Charge is not in PAID status",
+        payload: { chargeId: input.chargeId, status: charge.status },
+      });
       return { enrollmentCreated: false };
     }
 
     // Verificar se já existe enrollment para esta charge (idempotência)
     const existingEnrollment = await this.enrollmentRepository.findByChargeId(input.chargeId);
     if (existingEnrollment) {
-      logger.info(
-        {
-          chargeId: input.chargeId,
-          enrollmentId: existingEnrollment.id,
-        },
-        "Enrollment already exists for charge"
-      );
+      logger.info({
+        type: "PIX_WEBHOOK_ENROLLMENT_EXISTS",
+        message: "Enrollment already exists for charge",
+        payload: { chargeId: input.chargeId, enrollmentId: existingEnrollment.id },
+      });
       return {
         enrollmentCreated: false,
         enrollmentId: existingEnrollment.id,
@@ -72,13 +72,11 @@ export class ProcessPixWebhook {
     // Verificar se externalRef indica um curso (formato: "course:<courseId>")
     const externalRef = charge.externalRef;
     if (!externalRef || !externalRef.startsWith("course:")) {
-      logger.info(
-        {
-          chargeId: input.chargeId,
-          externalRef,
-        },
-        "Charge does not have course externalRef, skipping enrollment"
-      );
+      logger.info({
+        type: "PIX_WEBHOOK_NO_COURSE_REF",
+        message: "Charge does not have course externalRef, skipping enrollment",
+        payload: { chargeId: input.chargeId, externalRef },
+      });
       return { enrollmentCreated: false };
     }
 
@@ -86,12 +84,11 @@ export class ProcessPixWebhook {
     const userId = charge.metadata?.userId as string | undefined;
 
     if (!userId) {
-      logger.warn(
-        {
-          chargeId: input.chargeId,
-        },
-        "Charge metadata does not contain userId"
-      );
+      logger.warn({
+        type: "PIX_WEBHOOK_MISSING_USER",
+        message: "Charge metadata does not contain userId",
+        payload: { chargeId: input.chargeId },
+      });
       return { enrollmentCreated: false };
     }
 

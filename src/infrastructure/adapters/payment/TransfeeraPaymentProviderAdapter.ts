@@ -10,11 +10,11 @@
 import { AxiosError } from "axios";
 import { env } from "../../../config/env";
 import {
-    BoletoIssueInput,
-    BoletoIssueOutput,
-    PaymentProviderPort,
-    PixIssueInput,
-    PixIssueOutput,
+  BoletoIssueInput,
+  BoletoIssueOutput,
+  PaymentProviderPort,
+  PixIssueInput,
+  PixIssueOutput,
 } from "../../../ports/PaymentProviderPort";
 import { logger } from "../../logger";
 import { PaymentProviderError } from "./PaymentProviderErrors";
@@ -90,6 +90,7 @@ export class TransfeeraPaymentProviderAdapter implements PaymentProviderPort {
         qrCode: response.image_base64,
         copyPaste: response.emv_payload,
         expiresAt: input.expiresAt || new Date(Date.now() + expirationSeconds * 1000),
+        txid: response.txid,
       };
     } catch (error) {
       if (error instanceof PaymentProviderError && error.code === "TRANSFEERA_UNAUTHORIZED") {

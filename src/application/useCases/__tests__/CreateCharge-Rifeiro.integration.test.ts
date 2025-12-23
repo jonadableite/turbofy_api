@@ -43,7 +43,7 @@ describe("CreateCharge - Rifeiro Integration", () => {
         email: `rifeiro-${randomUUID()}@test.com`,
         document: rifeiroDocument,
         passwordHash: "hashed",
-        roles: ["USER"],
+        roles: ["BUYER"],
       },
     });
 
@@ -74,7 +74,7 @@ describe("CreateCharge - Rifeiro Integration", () => {
         email: `producer-${randomUUID()}@test.com`,
         document: "98765432100",
         passwordHash: "hashed",
-        roles: ["USER"],
+        roles: ["BUYER"],
       },
     });
 
@@ -235,7 +235,7 @@ describe("CreateCharge - Rifeiro Integration", () => {
         email: `rifeiro2-${randomUUID()}@test.com`,
         document: rifeiro2Document,
         passwordHash: "hashed",
-        roles: ["USER"],
+        roles: ["BUYER"],
       },
     });
 

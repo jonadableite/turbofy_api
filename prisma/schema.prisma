@@ -112,6 +112,11 @@ model User {
   passwordHash        String
   roles               UserRole[]           @default([BUYER]) // Array de roles do usuário
   document            String               @unique // CPF ou CNPJ
+  documentType        String? // CPF ou CNPJ normalizado
+  kycStatus           String               @default("UNVERIFIED") // UNVERIFIED, PENDING_REVIEW, APPROVED, REJECTED
+  kycSubmittedAt      DateTime?
+  kycApprovedAt       DateTime?
+  kycRejectedAt       DateTime?
   phone               String? // Telefone para SMS/WhatsApp MFA futuro
   tenantId            String?
   tenant              Tenant?              @relation(fields: [tenantId], references: [id])
@@ -126,8 +131,91 @@ model User {
   enrollments         Enrollment[]
   affiliations        Affiliation[]
   coProducers         CoProducer[]
+  kycSubmissions      UserKycSubmission[]
+  pixKeys             UserPixKey[]
+  ledgerEntries       UserLedgerEntry[]
+  withdrawals         Withdrawal[]
 
   @@index([tenantId])
+}
+
+model UserKycSubmission {
+  id               String            @id @default(uuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status           String            @default("PENDING_REVIEW") // UNVERIFIED, PENDING_REVIEW, APPROVED, REJECTED
+  rejectionReason  String?
+  createdAt        DateTime          @default(now())
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  documents        UserKycDocument[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model UserKycDocument {
+  id           String            @id @default(uuid())
+  submissionId String
+  submission   UserKycSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  type         String
+  url          String
+  createdAt    DateTime          @default(now())
+
+  @@index([submissionId])
+}
+
+model UserPixKey {
+  id                 String    @id @default(uuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type               String // CPF ou CNPJ
+  key                String // apenas dígitos
+  status             String    @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, REJECTED
+  verificationSource String? // INTERNAL_MATCH, TRANSFEERA_API
+  createdAt          DateTime  @default(now())
+  verifiedAt         DateTime?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+
+  @@unique([userId])
+  @@index([userId])
+}
+
+model UserLedgerEntry {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String // CHARGE_NET, REFUND, WITHDRAWAL_DEBIT, WITHDRAWAL_FEE
+  status        String   @default("PENDING") // PENDING, POSTED, CANCELED
+  amountCents   Int
+  isCredit      Boolean
+  referenceType String // CHARGE, SETTLEMENT, WITHDRAWAL, ADJUSTMENT
+  referenceId   String
+  occurredAt    DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([userId, status])
+  @@index([referenceId])
+}
+
+model Withdrawal {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountCents       Int
+  feeCents          Int       @default(150) // R$ 1,50
+  totalDebitedCents Int
+  status            String    @default("REQUESTED") // REQUESTED, PENDING_PROCESSING, PROCESSING, COMPLETED, FAILED, CANCELED
+  transferaTxId     String?
+  failureReason     String?
+  idempotencyKey    String
+  createdAt         DateTime  @default(now())
+  processedAt       DateTime?
+  version           Int       @default(1)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, status])
 }
 
 model UserOtp {
@@ -1139,7 +1227,8 @@ model Webhook {
   updatedAt    DateTime      @updatedAt
 
   // Relacionamento com logs de chamadas
-  logs WebhookLog[]
+  logs       WebhookLog[]
+  deliveries WebhookDelivery[]
 
   @@index([merchantId])
   @@index([merchantId, status])
@@ -1162,6 +1251,28 @@ model WebhookLog {
 
   @@index([webhookId])
   @@index([webhookId, createdAt])
+}
+
+/// WebhookDelivery: rastreia entregas individuais de webhooks
+/// Permite idempotência, auditoria completa e reprocessamento
+model WebhookDelivery {
+  id            String    @id @default(uuid())
+  webhookId     String
+  webhook       Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  eventId       String // ID do evento (evt_uuid)
+  eventType     String // Tipo do evento (charge.paid, etc.)
+  attempt       Int       @default(1) // Número da tentativa atual
+  status        String    @default("PENDING") // PENDING, SUCCESS, FAILED, RETRYING
+  httpStatus    Int? // Código HTTP da resposta
+  errorMessage  String? // Mensagem de erro
+  nextAttemptAt DateTime? // Quando tentar novamente (para retry com backoff)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([webhookId, eventId]) // Garante idempotência: um webhook não recebe o mesmo evento duas vezes
+  @@index([webhookId])
+  @@index([eventId])
+  @@index([status, nextAttemptAt])
 }
 
 /// ---------------------------------------

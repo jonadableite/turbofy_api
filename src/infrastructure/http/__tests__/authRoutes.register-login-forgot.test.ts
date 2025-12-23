@@ -60,7 +60,7 @@ type User = { id: string; email: string; passwordHash?: string; roles?: string[]
 const users = new Map<string, User>();
 const authAttempts = new Map<string, { email: string; ip: string; count: number; windowStart: Date; lockedUntil: Date | null }>();
 const passwordResetCreateMock = jest.fn(async () => ({ id: "prt-1" }));
-const userCreateMock = jest.fn(async ({ data }: any) => { const u: User = { id: "u-new", email: data.email, passwordHash: data.passwordHash, roles: data.roles ?? ["USER"] }; users.set(u.email, u); return u; });
+const userCreateMock = jest.fn(async ({ data }: any) => { const u: User = { id: "u-new", email: data.email, passwordHash: data.passwordHash, roles: data.roles ?? ["BUYER"] }; users.set(u.email, u); return u; });
 const userTokenCreateMock = jest.fn(async () => ({ id: "ut-1" }));
 const userTokenFindUniqueMock = jest.fn(async () => ({ tokenHash: "hash", userId: "u-1", revokedAt: null }));
 const userTokenUpdateMock = jest.fn(async () => ({ id: "ut-1" }));
@@ -164,7 +164,7 @@ describe("Auth Routes - register/login/forgot-password", () => {
   describe("POST /auth/login", () => {
     it("returns 200, sets cookies and recaptcha passes when provided", async () => {
       const app = setupApp();
-      users.set("user@example.com", { id: "u-1", email: "user@example.com", passwordHash: "hash", roles: ["USER"] });
+      users.set("user@example.com", { id: "u-1", email: "user@example.com", passwordHash: "hash", roles: ["BUYER"] });
       const res = await request(app)
         .post("/auth/login")
         .send({ email: "user@example.com", password: "strongpass123", document: "12345678901", recaptchaToken: "token" });

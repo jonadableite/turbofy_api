@@ -128,8 +128,38 @@ dashboardRouter.get(
             ? totalSales._sum.amountCents / totalTransactions
             : 0;
 
+        // Buscar wallet para valor líquido real (após taxas)
+        const wallet = await tx.wallet.findUnique({
+          where: { merchantId },
+          select: { 
+            totalEarnedCents: true,
+            availableBalanceCents: true,
+            pendingBalanceCents: true,
+          },
+        });
+
+        // Se não tiver wallet, calcular valor líquido baseado em charges - fees
+        let totalNetSales = wallet?.totalEarnedCents || 0;
+        if (!wallet) {
+          // Calcular valor líquido diretamente das charges
+          const chargesWithFees = await tx.charge.findMany({
+            where: { merchantId, status: 'PAID' },
+            select: {
+              amountCents: true,
+              fees: { select: { amountCents: true } },
+            },
+          });
+          
+          totalNetSales = chargesWithFees.reduce((sum, charge) => {
+            const totalFees = charge.fees.reduce((feeSum, fee) => feeSum + fee.amountCents, 0);
+            return sum + (charge.amountCents - totalFees);
+          }, 0);
+        }
+
         return {
-          totalSales: totalSales._sum.amountCents || 0,
+          totalSales: totalNetSales, // Usar valor líquido para o TurboProgressBar
+          totalGrossSales: totalSales._sum.amountCents || 0, // Valor bruto
+          totalNetSales, // Valor líquido (após taxas)
           totalTransactions,
           averageTicket: Math.round(averageTicket),
           pixSales: pixSales._sum.amountCents || 0,
@@ -138,6 +168,11 @@ dashboardRouter.get(
           approvedPayments: totalSales._sum.amountCents || 0,
           refundedPayments: refundedPayments._sum.amountCents || 0,
           failedPayments: failedPayments._sum.amountCents || 0,
+          wallet: {
+            totalEarnedCents: wallet?.totalEarnedCents || totalNetSales,
+            availableBalanceCents: wallet?.availableBalanceCents || 0,
+            pendingBalanceCents: wallet?.pendingBalanceCents || 0,
+          },
         };
       });
 
@@ -244,6 +279,23 @@ dashboardRouter.get(
             code: 'MERCHANT_ID_REQUIRED',
             message: 'merchantId é obrigatório',
           },
+        });
+      }
+
+      // Verificar se o merchant existe
+      const merchantExists = await prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: { id: true },
+      });
+
+      if (!merchantExists) {
+        logger.warn({ merchantId }, 'Merchant not found for health check - returning empty data');
+        // Retornar dados vazios ao invés de erro 404
+        return res.json({
+          approvedPayments: 0,
+          refundedPayments: 0,
+          failedPayments: 0,
+          chargebackRate: 0,
         });
       }
 

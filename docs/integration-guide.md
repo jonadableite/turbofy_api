@@ -296,20 +296,68 @@ x-client-secret: <SEU_CLIENT_SECRET>
 
 ## 🔔 Webhooks (Notificações)
 
-O Turbofy pode enviar notificações para sua URL quando o status da cobrança mudar (ex.: `charge.paid`, `charge.expired`).
+O Turbofy **envia notificações** para sua URL quando o status da cobrança mudar (ex.: `charge.paid`, `charge.expired`).
 
-### Configurar Webhook
+**⚠️ IMPORTANTE:** Você **PRECISA configurar um webhook** para receber eventos. Sem isso, você não será notificado quando um Pix for pago!
 
-**Endpoint:** `POST /webhooks` (requer autenticação)
+### Passo 1: Criar seu Webhook
 
+**Endpoint:** `POST /integrations/webhooks`
+
+**Headers:**
+```
+x-client-id: <SEU_CLIENT_ID>
+x-client-secret: <SEU_CLIENT_SECRET>
+Content-Type: application/json
+```
+
+**Request Body:**
 ```json
 {
+  "name": "Meu Webhook de Pagamentos",
   "url": "https://seu-site.com/webhooks/turbofy",
-  "events": ["charge.paid", "charge.expired"]
+  "events": ["charge.paid", "charge.expired", "charge.created"]
 }
 ```
 
-### Validar Assinatura
+**Response (201 Created):**
+```json
+{
+  "id": "wh_abc123",
+  "publicId": "wh_abc123",
+  "name": "Meu Webhook de Pagamentos",
+  "url": "https://seu-site.com/webhooks/turbofy",
+  "secret": "whsec_5d55729305b197168018fcff2a18e99f78ab8dd4...",
+  "events": ["charge.paid", "charge.expired", "charge.created"],
+  "status": "ACTIVE",
+  "devMode": false,
+  "createdAt": "2025-01-15T10:00:00.000Z"
+}
+```
+
+**⚠️ GUARDE O SECRET!** Ele só é retornado na criação. Use-o para validar as assinaturas dos webhooks.
+
+### Eventos Disponíveis
+
+| Evento | Descrição |
+|--------|-----------|
+| `charge.created` | Cobrança criada |
+| `charge.paid` | ✅ **Pagamento confirmado** |
+| `charge.expired` | Cobrança expirada |
+| `billing.paid` | Fatura paga |
+| `billing.expired` | Fatura expirada |
+| `withdraw.done` | Saque concluído |
+| `withdraw.failed` | Saque falhou |
+
+### Passo 2: Implementar Endpoint de Webhook
+
+Seu servidor precisa ter um endpoint que:
+1. Recebe requisições POST
+2. Valida a assinatura
+3. Processa o evento
+4. Retorna 200 OK
+
+### Passo 3: Validar Assinatura
 
 Todas as notificações incluem o header `turbofy-signature`:
 
@@ -321,12 +369,49 @@ turbofy-signature: t=1580306324381,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a
 
 ```typescript
 import crypto from 'crypto';
+import express from 'express';
+
+// IMPORTANTE: Use express.raw() para receber o body como Buffer
+app.post('/webhooks/turbofy', express.raw({ type: 'application/json' }), (req, res) => {
+  const signature = req.headers['turbofy-signature'] as string;
+  const rawBody = req.body.toString();
+  const webhookSecret = process.env.TURBOFY_WEBHOOK_SECRET!; // Secret retornado na criação do webhook
+
+  if (!validateWebhookSignature(signature, rawBody, webhookSecret)) {
+    console.error('Assinatura inválida!');
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+
+  const payload = JSON.parse(rawBody);
+  console.log('Webhook recebido:', payload);
+
+  // Processar evento
+  switch (payload.type) {
+    case 'charge.paid':
+      // ✅ Pagamento confirmado! Liberar acesso/produto
+      console.log(`Cobrança ${payload.data.chargeId} paga!`);
+      console.log(`Valor: R$ ${payload.data.amountCents / 100}`);
+      console.log(`Referência externa: ${payload.data.externalRef}`);
+      // TODO: Atualizar seu banco de dados
+      break;
+    
+    case 'charge.expired':
+      // Cobrança expirou sem pagamento
+      console.log(`Cobrança ${payload.data.chargeId} expirou`);
+      break;
+  }
+
+  // SEMPRE retorne 200 para confirmar recebimento
+  res.status(200).json({ received: true });
+});
 
 function validateWebhookSignature(
   signature: string,
   rawBody: string,
   secret: string
 ): boolean {
+  if (!signature) return false;
+
   const parts = signature.split(',');
   const timestamp = parts.find((p) => p.startsWith('t='))?.split('=')[1];
   const receivedSignature = parts.find((p) => p.startsWith('v1='))?.split('=')[1];
@@ -341,28 +426,85 @@ function validateWebhookSignature(
     .update(signedPayload)
     .digest('hex');
 
-  return computedSignature === receivedSignature;
+  // Comparação segura
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(computedSignature, 'hex'),
+      Buffer.from(receivedSignature, 'hex')
+    );
+  } catch {
+    return computedSignature === receivedSignature;
+  }
 }
+```
 
-// Exemplo com Express
-app.post('/webhooks/turbofy', express.raw({ type: 'application/json' }), (req, res) => {
-  const signature = req.headers['turbofy-signature'] as string;
-  const rawBody = req.body.toString();
+### Payload do Evento `charge.paid`
 
-  if (!validateWebhookSignature(signature, rawBody, process.env.WEBHOOK_SECRET!)) {
-    return res.status(401).json({ error: 'Invalid signature' });
+```json
+{
+  "id": "evt_abc123",
+  "type": "charge.paid",
+  "timestamp": "2025-01-15T10:00:00.000Z",
+  "merchantId": "your-merchant-id",
+  "data": {
+    "chargeId": "1cec00cd-8778-4cdc-903d-8b950d6713ec",
+    "status": "PAID",
+    "amountCents": 50000,
+    "currency": "BRL",
+    "method": "PIX",
+    "externalRef": "order:1234",
+    "metadata": {
+      "customerId": "cus_abc",
+      "orderId": "1234"
+    },
+    "paidAt": "2025-01-15T10:00:00.000Z"
   }
+}
+```
 
-  const payload = JSON.parse(rawBody);
-  console.log('Webhook recebido:', payload);
+### Listar Webhooks
 
-  // Processar evento
-  if (payload.type === 'charge.paid') {
-    // Atualizar pedido como pago
-  }
+**Endpoint:** `GET /integrations/webhooks`
 
-  res.status(200).json({ received: true });
-});
+```bash
+curl -X GET "https://api.turbofy.com/integrations/webhooks" \
+  -H "x-client-id: SEU_CLIENT_ID" \
+  -H "x-client-secret: SEU_CLIENT_SECRET"
+```
+
+### Testar Webhook
+
+**Endpoint:** `POST /integrations/webhooks/:id/test`
+
+Envia um evento de teste para sua URL.
+
+```bash
+curl -X POST "https://api.turbofy.com/integrations/webhooks/wh_abc123/test" \
+  -H "x-client-id: SEU_CLIENT_ID" \
+  -H "x-client-secret: SEU_CLIENT_SECRET"
+```
+
+### Rotacionar Secret
+
+**Endpoint:** `POST /integrations/webhooks/:id/rotate-secret`
+
+Gera um novo secret (o antigo para de funcionar imediatamente).
+
+```bash
+curl -X POST "https://api.turbofy.com/integrations/webhooks/wh_abc123/rotate-secret" \
+  -H "x-client-id: SEU_CLIENT_ID" \
+  -H "x-client-secret: SEU_CLIENT_SECRET"
+```
+
+### Fluxo Completo
+
+```
+1. Integrador cria cobrança PIX → POST /rifeiro/pix
+2. Cliente paga o PIX
+3. Transfeera notifica Turbofy (webhook interno)
+4. Turbofy processa e marca cobrança como PAID
+5. Turbofy envia webhook para URL do integrador → POST https://seu-site.com/webhooks/turbofy
+6. Integrador recebe evento charge.paid e libera acesso
 ```
 
 ---
