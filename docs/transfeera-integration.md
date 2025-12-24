@@ -47,11 +47,89 @@ TRANSFEERA_PIX_KEY=email@exemplo.com
    ```env
    TRANSFEERA_API_URL=https://api.mtls.transfeera.com
    TRANSFEERA_LOGIN_URL=https://login-api.mtls.transfeera.com
-CONTACERTA_API_URL=https://contacerta-api.mtls.transfeera.com
+   CONTACERTA_API_URL=https://contacerta-api.mtls.transfeera.com
    ```
 
 > A Transfeera pode fornecer domínios alternativos (ex.: `login-api.transfeera.com`).  
 > Use sempre os endpoints de produção informados pela Transfeera para sua conta e mantenha **login/api no mesmo ambiente** (prod com prod, sandbox com sandbox).
+
+### Configuração mTLS (Obrigatório para URLs .mtls.)
+
+URLs com domínio `.mtls.transfeera.com` **exigem certificado mTLS** (Mutual TLS). Sem o certificado, a API retornará erro 403.
+
+#### Opção 1: Configurar via arquivos (recomendado em produção)
+
+Salve os certificados em arquivos seguros no servidor e configure:
+
+```env
+TRANSFEERA_MTLS_CERT_PATH=/caminho/para/certificado.pem
+TRANSFEERA_MTLS_KEY_PATH=/caminho/para/chave.key
+TRANSFEERA_MTLS_CA_PATH=/caminho/para/ca.pem  # Opcional
+```
+
+#### Opção 2: Configurar via Base64 (útil para CI/CD e Docker)
+
+Codifique os certificados em Base64 e configure:
+
+```bash
+# Gerar Base64 dos certificados
+cat certificado.pem | base64 -w 0 > cert_base64.txt
+cat chave.key | base64 -w 0 > key_base64.txt
+```
+
+```env
+TRANSFEERA_MTLS_CERT_BASE64=<conteúdo do cert_base64.txt>
+TRANSFEERA_MTLS_KEY_BASE64=<conteúdo do key_base64.txt>
+TRANSFEERA_MTLS_CA_BASE64=<opcional - CA em base64>
+```
+
+#### Opção 3: Usar URLs sem mTLS (mais simples, mas requer IP liberado)
+
+A Transfeera pode fornecer URLs alternativas sem mTLS:
+
+```env
+TRANSFEERA_API_URL=https://api.transfeera.com
+TRANSFEERA_LOGIN_URL=https://login-api.transfeera.com
+CONTACERTA_API_URL=https://contacerta-api.transfeera.com
+```
+
+> **Importante:** URLs sem `.mtls.` requerem que seu IP esteja liberado no painel da Transfeera.
+
+#### Troubleshooting mTLS
+
+Se você receber erro 403 ou "MTLS_NOT_CONFIGURED":
+
+1. **Verifique se os certificados estão configurados:**
+   ```bash
+   # Verificar variáveis de ambiente
+   echo $TRANSFEERA_MTLS_CERT_PATH
+   echo $TRANSFEERA_MTLS_KEY_PATH
+   ```
+
+2. **Verifique se os certificados são válidos:**
+   ```bash
+   # Verificar certificado
+   openssl x509 -in certificado.pem -text -noout
+   
+   # Verificar chave
+   openssl rsa -in chave.key -check
+   
+   # Verificar se correspondem
+   openssl x509 -noout -modulus -in certificado.pem | openssl md5
+   openssl rsa -noout -modulus -in chave.key | openssl md5
+   ```
+
+3. **Verifique a data de validade:**
+   ```bash
+   openssl x509 -in certificado.pem -enddate -noout
+   ```
+
+4. **Se o certificado expirou**, entre em contato com a Transfeera para renovação.
+
+5. **Alternativa temporária:** Use URLs de sandbox (sem mTLS) para testes:
+   ```env
+   CONTACERTA_API_URL=https://contacerta-api-sandbox.transfeera.com
+   ```
 
 ## Arquitetura
 

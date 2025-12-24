@@ -24,6 +24,10 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   RABBITMQ_URI: z.string().nonempty(),
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
+  
+  // Better Auth Configuration
+  BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
+  BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
   SMTP_HOST: z.string().nonempty(),
   SMTP_PORT: z.string().regex(/^\d+$/).transform(Number),
   SMTP_USERNAME: z.string().nonempty(),
@@ -90,6 +94,8 @@ function testDefaults(): z.infer<typeof envSchema> {
     DATABASE_URL: process.env.DATABASE_URL || "postgresql://localhost:5432/test",
     RABBITMQ_URI: process.env.RABBITMQ_URI || "amqp://localhost",
     JWT_SECRET: process.env.JWT_SECRET || "j".repeat(32),
+    BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || "b".repeat(32),
+    BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
     SMTP_HOST: process.env.SMTP_HOST || "localhost",
     SMTP_PORT: Number(process.env.SMTP_PORT || "25") as any,
     SMTP_USERNAME: process.env.SMTP_USERNAME || "user",

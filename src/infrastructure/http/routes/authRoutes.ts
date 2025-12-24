@@ -14,6 +14,7 @@ import { trace } from "@opentelemetry/api";
 // reCAPTCHA removido
 import { generateCsrfToken } from "../../security/csrf";
 import { authMiddleware } from "../middlewares/authMiddleware";
+import { betterAuthMiddleware } from "../middlewares/betterAuthMiddleware";
 import { createSecureRateLimiter } from "../utils/rateLimitHelper";
 
 const authRouter = Router();
@@ -87,10 +88,12 @@ async function checkLock(email: string, ip: string) {
 }
 
 // GET /auth/me - Obter dados do usuário autenticado
+// NOTA: Esta rota usa betterAuthMiddleware para compatibilidade com Better Auth
+// O authMiddleware legado ainda pode ser usado como fallback
 authRouter.get(
   "/me",
   meLimiter,
-  authMiddleware,
+  betterAuthMiddleware,
   async (req: Request, res: Response) => {
     try {
       if (!req.user) {
@@ -99,50 +102,30 @@ authRouter.get(
         });
       }
 
-      // Buscar dados completos do usuário
-      const prismaAny = prisma as any;
-      const user = await prismaAny.user.findUnique({
-        where: { id: req.user.id },
-        select: {
-          id: true,
-          email: true,
-          roles: true,
-          document: true,
-          phone: true,
-          merchantId: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      } as any);
-
-      if (!user) {
-        return res.status(404).json({
-          error: {
-            code: "USER_NOT_FOUND",
-            message: "Usuário não encontrado",
-          },
-        });
-      }
+      // Os dados já estão disponíveis no req.user via Better Auth
+      const user = req.user;
 
       res.json({
         id: user.id,
         email: user.email,
-        roles: user.roles,
-        name: user.email.split("@")[0],
-        document: user.document,
-        documentType: (user as any).documentType ?? null,
-        kycStatus: (user as any).kycStatus ?? null,
-        phone: user.phone,
-        merchantId: user.merchantId,
+        roles: user.roles || [],
+        name: user.name || user.email.split("@")[0],
+        document: user.document ?? null,
+        documentType: user.documentType ?? null,
+        kycStatus: user.kycStatus ?? null,
+        phone: user.phone ?? null,
+        merchantId: user.merchantId ?? null,
+        image: user.image ?? null,
+        emailVerified: user.emailVerified ?? false,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       });
     } catch (err) {
-    logger.error({
-      type: "AUTH_FETCH_USER_ERROR",
-      message: "Erro ao buscar dados do usuário",
-      error: err,
-    });
+      logger.error({
+        type: "AUTH_FETCH_USER_ERROR",
+        message: "Erro ao buscar dados do usuário",
+        error: err,
+      });
       res
         .status(500)
         .json({ error: { code: "INTERNAL_ERROR", message: "Erro interno" } });

@@ -654,11 +654,13 @@ export class TransfeeraClient {
   private validationTokenExpiresAt: number = 0;
   private readonly userAgent: string;
   private readonly httpsAgent: https.Agent | undefined;
+  private readonly mtlsConfigured: boolean;
 
   constructor() {
     this.userAgent = `Turbofy Gateway (contato@turbofy.com)`;
 
     this.httpsAgent = this.buildHttpsAgent();
+    this.mtlsConfigured = Boolean(this.httpsAgent);
 
     // Guardrails: evitar “produção” apontando para sandbox por engano
     if (env.NODE_ENV === "production") {
@@ -770,6 +772,35 @@ export class TransfeeraClient {
     }
   }
 
+  /**
+   * Verifica se mTLS é necessário para a URL informada e se está configurado
+   * @throws PaymentProviderError se mTLS é necessário mas não está configurado
+   */
+  private ensureMtlsForUrl(url: string, context: string): void {
+    const requiresMtls = url.includes(".mtls.");
+    
+    if (requiresMtls && !this.mtlsConfigured) {
+      logger.error(
+        {
+          url,
+          context,
+          mtlsConfigured: this.mtlsConfigured,
+          hasCertPath: Boolean(env.TRANSFEERA_MTLS_CERT_PATH),
+          hasCertBase64: Boolean(env.TRANSFEERA_MTLS_CERT_BASE64),
+          hasKeyPath: Boolean(env.TRANSFEERA_MTLS_KEY_PATH),
+          hasKeyBase64: Boolean(env.TRANSFEERA_MTLS_KEY_BASE64),
+        },
+        "mTLS is required for this URL but certificates are not configured"
+      );
+      
+      throw new PaymentProviderError({
+        statusCode: 503,
+        code: "MTLS_NOT_CONFIGURED",
+        message: `A URL ${url} requer certificado mTLS, mas os certificados não estão configurados. Configure TRANSFEERA_MTLS_CERT_* e TRANSFEERA_MTLS_KEY_* ou use uma URL sem mTLS (sandbox).`,
+      });
+    }
+  }
+
   private async authenticateValidations(): Promise<void> {
     const clientId = env.CONTACERTA_CLIENT_ID ?? env.TRANSFEERA_CLIENT_ID;
     const clientSecret = env.CONTACERTA_CLIENT_SECRET ?? env.TRANSFEERA_CLIENT_SECRET;
@@ -778,6 +809,12 @@ export class TransfeeraClient {
     if (!clientId || !clientSecret) {
       throw new Error("Conta Certa credentials not configured");
     }
+
+    // Verificar se mTLS é necessário para a URL de login
+    this.ensureMtlsForUrl(loginUrl, "Conta Certa Login");
+    
+    // Verificar também para a API URL
+    this.ensureMtlsForUrl(env.CONTACERTA_API_URL, "Conta Certa API");
 
     try {
       const loginBaseUrl = loginUrl.replace(/\/authorization\/?$/i, "").replace(/\/$/, "");
@@ -804,14 +841,26 @@ export class TransfeeraClient {
       logger.info({ expiresIn: response.data.expires_in }, "Conta Certa authentication successful");
     } catch (error) {
       const axiosError = error as AxiosError;
+      const status = axiosError.response?.status;
+      
       logger.error(
         {
           error: axiosError.message,
-          status: axiosError.response?.status,
+          status,
           data: axiosError.response?.data,
         },
         "Failed to authenticate with Conta Certa"
       );
+      
+      // Erro 403 em URL mTLS geralmente significa certificado inválido ou não apresentado
+      if (status === 403 && (loginUrl.includes(".mtls.") || env.CONTACERTA_API_URL.includes(".mtls."))) {
+        throw new PaymentProviderError({
+          statusCode: 403,
+          code: "MTLS_CERTIFICATE_REJECTED",
+          message: "Certificado mTLS rejeitado pela Transfeera. Verifique se os certificados estão corretos e válidos.",
+        });
+      }
+      
       throw new Error(`Conta Certa authentication failed: ${axiosError.message}`);
     }
   }

@@ -48,7 +48,7 @@ export const requirePermission = (permission: string) => {
       return
     }
 
-    const allowed = (req.user.roles ?? []).some((role) => {
+    const allowed = (req.user.roles ?? []).some((role: string) => {
       const normalizedRole = role.toLowerCase()
       if (!isRole(normalizedRole)) return false
       return rolePermissions[normalizedRole]?.includes(permission)

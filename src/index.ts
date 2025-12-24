@@ -22,7 +22,9 @@ import https from "https";
 import path from "path";
 import pinoHttp from "pino-http";
 import { register } from "prom-client";
+import { toNodeHandler } from "better-auth/node";
 import { env } from "./config/env";
+import { auth } from "./infrastructure/auth/better-auth";
 import { RabbitMQMessagingAdapter } from "./infrastructure/adapters/messaging/RabbitMQMessagingAdapter";
 import { startChargeExpiredConsumer } from "./infrastructure/consumers/ChargeExpiredConsumer";
 import { startChargePaidConsumer } from "./infrastructure/consumers/ChargePaidConsumer";
@@ -124,6 +126,10 @@ app.use(
 );
 
 app.use(cookieParser());
+
+// 🔐 Better Auth Handler - IMPORTANTE: Deve vir ANTES de express.json()
+// Isso é necessário porque o Better Auth precisa do body raw para processar corretamente
+app.all("/api/auth/*", toNodeHandler(auth)); // ExpressJS v4+
 
 // Middleware para capturar rawBody para webhooks (deve vir antes de express.json())
 // Necessário para validar assinatura HMAC dos webhooks

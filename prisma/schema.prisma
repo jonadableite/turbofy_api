@@ -136,7 +136,80 @@ model User {
   ledgerEntries       UserLedgerEntry[]
   withdrawals         Withdrawal[]
 
+  // Better Auth Required Fields
+  name          String?
+  emailVerified Boolean @default(false)
+  image         String?
+
+  // Better Auth Admin Plugin Fields
+  role       String?   @default("user") // Admin plugin role (user, admin, etc.)
+  banned     Boolean?
+  banReason  String?
+  banExpires DateTime?
+
+  // Better Auth Relations
+  sessions Session[]
+  accounts Account[]
+
   @@index([tenantId])
+}
+
+/// ---------------------------------------
+/// Better Auth: Session Model
+/// ---------------------------------------
+/// Gerenciamento de sessões de autenticação
+
+model Session {
+  id             String   @id @default(uuid())
+  expiresAt      DateTime
+  token          String   @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  impersonatedBy String? // ID do admin que está impersonando esta sessão (Admin Plugin)
+
+  @@index([userId])
+}
+
+/// ---------------------------------------
+/// Better Auth: Account Model
+/// ---------------------------------------
+/// Vincula contas de autenticação (credential, oauth) ao usuário
+
+model Account {
+  id                    String    @id @default(uuid())
+  accountId             String // ID externo (para OAuth) ou ID do usuário (para credential)
+  providerId            String // "credential", "google", "github", etc.
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String? // Hash da senha para provider "credential"
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+/// ---------------------------------------
+/// Better Auth: Verification Model
+/// ---------------------------------------
+/// Tokens de verificação (email, reset password, etc.)
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String // Email ou outro identificador
+  value      String // Token de verificação
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model UserKycSubmission {
@@ -288,20 +361,20 @@ model Payment {
 }
 
 model PixKey {
-  id                   String    @id @default(uuid())
-  merchantId           String
-  merchant             Merchant  @relation(fields: [merchantId], references: [id])
-  type                 String
-  key                  String    @unique
-  description          String?
-  status               String    @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, REJECTED
-  verificationSource   String?   // INTERNAL_MATCH, TRANSFEERA_API
-  verifiedAt           DateTime?
-  rejectedAt           DateTime?
-  rejectionReason      String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  isActive             Boolean   @default(true)
+  id                 String    @id @default(uuid())
+  merchantId         String
+  merchant           Merchant  @relation(fields: [merchantId], references: [id])
+  type               String
+  key                String    @unique
+  description        String?
+  status             String    @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, REJECTED
+  verificationSource String? // INTERNAL_MATCH, TRANSFEERA_API
+  verifiedAt         DateTime?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  isActive           Boolean   @default(true)
 }
 
 model BankAccount {

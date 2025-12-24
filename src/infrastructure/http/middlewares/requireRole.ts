@@ -11,8 +11,8 @@ export const requireRoles = (...roles: string[]) => {
       });
     }
 
-    const expectedRoles = roles.map((role) => role.toUpperCase());
-    const hasRole = req.user.roles?.some((role) =>
+    const expectedRoles = roles.map((role: string) => role.toUpperCase());
+    const hasRole = req.user.roles?.some((role: string) =>
       expectedRoles.includes(role.toUpperCase())
     );
     if (!hasRole) {

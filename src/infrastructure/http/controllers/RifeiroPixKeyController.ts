@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import { onlyDigits } from "../../../utils/brDoc";
+import { PaymentProviderError } from "../../adapters/payment/PaymentProviderErrors";
 import { TransfeeraClient } from "../../adapters/payment/TransfeeraClient";
 import { prisma } from "../../database/prismaClient";
 import { logger } from "../../logger";
@@ -401,6 +402,38 @@ export class RifeiroPixKeyController {
         { error, userId: req.user?.id },
         "Error validating Rifeiro pix key with provider"
       );
+
+      // Verificar se é erro de mTLS não configurado
+      if (error instanceof PaymentProviderError) {
+        if (error.code === "MTLS_NOT_CONFIGURED" || error.code === "MTLS_CERTIFICATE_REJECTED") {
+          logger.error(
+            { code: error.code, message: error.message },
+            "mTLS configuration issue detected"
+          );
+          
+          // Marcar como pendente (não rejeitada) - é um erro de configuração, não da chave
+          if (pixKeyId) {
+            try {
+              await (prisma as any).pixKey.update({
+                where: { id: pixKeyId },
+                data: {
+                  isActive: false,
+                  description: "Validação temporariamente indisponível - configuração pendente",
+                },
+              } as any);
+            } catch (updateError) {
+              logger.error({ updateError, pixKeyId }, "Failed to update pixKey status on mTLS error");
+            }
+          }
+          
+          return res.status(503).json({
+            error: "VALIDATION_SERVICE_UNAVAILABLE",
+            message: "O serviço de validação de chave Pix está temporariamente indisponível. Por favor, entre em contato com o suporte técnico.",
+            code: error.code,
+            details: process.env.NODE_ENV === "development" ? error.message : undefined,
+          });
+        }
+      }
 
       const messageFromProvider =
         (error as unknown as { response?: { data?: { message?: string; error?: string } }; message?: string })

@@ -667,7 +667,7 @@ dashboardRouter.get(
               message: 'merchantId não associado',
             },
           });
-      if (!req.user.roles?.some(r => r.toUpperCase() === 'OWNER'))
+      if (!req.user.roles?.some((r: string) => r.toUpperCase() === 'OWNER'))
         return res
           .status(403)
           .json({
