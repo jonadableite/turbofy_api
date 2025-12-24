@@ -14,9 +14,22 @@
  * - Senhas bcrypt existentes são preservadas
  */
 
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
-const prisma = new PrismaClient();
+// Configurar o Pool e Adapter igual ao prismaClient.ts do projeto
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const adapter = new PrismaPg(pool);
+
+const prisma = new PrismaClient({
+  adapter,
+  log: ["error", "warn"],
+});
 
 interface MigrationStats {
   totalUsers: number;
@@ -240,6 +253,7 @@ const main = async (): Promise<void> => {
     process.exit(1);
   } finally {
     await prisma.$disconnect();
+    await pool.end();
   }
 };
 

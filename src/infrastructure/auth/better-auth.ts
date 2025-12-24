@@ -8,7 +8,6 @@
 
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { admin } from "better-auth/plugins";
 import bcrypt from "bcryptjs";
 import { prisma } from "../database/prismaClient";
 import { env } from "../../config/env";
@@ -124,16 +123,12 @@ export const auth = betterAuth({
     modelName: "account",
   },
 
-  plugins: [
-    admin({
-      // IDs de usuários admin fixos (opcional, pode ser preenchido depois)
-      adminUserIds: [],
-      // Roles considerados admin
-      adminRoles: ["ADMIN", "SUPER_ADMIN"],
-      // Role padrão para novos usuários
-      defaultRole: "BUYER",
-    }),
-  ],
+  // NOTA: O Admin Plugin do Better Auth foi removido porque ele adiciona
+  // um campo 'role' (singular) que conflita com o campo 'roles' (array UserRole[])
+  // existente no Turbofy. A verificação de permissões de admin é feita pelos
+  // middlewares do Turbofy (requireRoles, betterAuthMiddleware, rbac) que já
+  // verificam o array 'roles' corretamente.
+  plugins: [],
 
   advanced: {
     crossSubDomainCookies: {

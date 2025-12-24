@@ -141,8 +141,9 @@ model User {
   emailVerified Boolean @default(false)
   image         String?
 
-  // Better Auth Admin Plugin Fields
-  role       String?   @default("user") // Admin plugin role (user, admin, etc.)
+  // Better Auth Admin Plugin Fields (banimento de usuários)
+  // NOTA: O campo 'role' singular do Better Auth foi removido.
+  // O sistema usa o campo 'roles' (UserRole[]) existente acima.
   banned     Boolean?
   banReason  String?
   banExpires DateTime?
