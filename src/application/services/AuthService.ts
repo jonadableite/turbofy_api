@@ -2,12 +2,12 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { prisma } from '../../infrastructure/database/prismaClient';
-import { UserRole } from "@prisma/client";
 import { env } from '../../config/env';
 import { z } from 'zod';
 import { logger } from '../../infrastructure/logger';
 import { validateCpf, validateCnpj } from '../../utils/brDoc';
 import { trace } from '@opentelemetry/api';
+import { parseRoles } from '../../utils/roles';
 
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
 
@@ -44,13 +44,13 @@ export class AuthService {
       data: {
         email: data.email,
         passwordHash,
-        roles: [UserRole.BUYER],
+        role: "BUYER", // Role padrão do Better Auth (pode ser múltiplos separados por vírgula)
         document: data.document,
         phone: data.phone,
       },
     });
     // generate tokens immediately with rotation tracking
-    return this.issueTokens(user.id, user.roles);
+    return this.issueTokens(user.id, parseRoles(user.role));
   }
 
   private async storeRefreshToken(userId: string, token: string) {
@@ -69,7 +69,7 @@ export class AuthService {
   public async issueTokensForUserId(userId: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error('User not found');
-    return this.issueTokens(user.id, user.roles);
+    return this.issueTokens(user.id, parseRoles(user.role));
   }
 
   private async checkLock(email: string, ip: string): Promise<void> {
@@ -159,7 +159,7 @@ export class AuthService {
         throw new Error('Invalid credentials');
       }
       await this.recordSuccess(data.email, ip);
-      const tokens = await this.issueTokens(user.id, user.roles);
+      const tokens = await this.issueTokens(user.id, parseRoles(user.role));
       logger.info({
         type: 'AUTH_LOGIN_SUCCESS',
         message: 'Login successful',
@@ -216,7 +216,7 @@ export class AuthService {
         throw new Error('Invalid or reused refresh token');
       }
       // revoke old and issue new
-      const { accessToken, refreshToken } = await this.issueTokens(user.id, user.roles);
+      const { accessToken, refreshToken } = await this.issueTokens(user.id, parseRoles(user.role));
       const newHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
       await prisma.userToken.update({ where: { tokenHash }, data: { revokedAt: new Date(), replacedBy: newHash } });
       return { accessToken, refreshToken };
@@ -242,6 +242,6 @@ export class AuthService {
     const record = await prisma.userOtp.findFirst({ where: { userId: user.id, codeHash, consumedAt: null } });
     if (!record || record.expiresAt < new Date()) throw new Error('Invalid or expired OTP');
     await prisma.userOtp.update({ where: { id: record.id }, data: { consumedAt: new Date() } });
-    return this.issueTokens(user.id, user.roles);
+    return this.issueTokens(user.id, parseRoles(user.role));
   }
 }

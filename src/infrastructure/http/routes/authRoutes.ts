@@ -16,6 +16,7 @@ import { generateCsrfToken } from "../../security/csrf";
 import { authMiddleware } from "../middlewares/authMiddleware";
 import { betterAuthMiddleware } from "../middlewares/betterAuthMiddleware";
 import { createSecureRateLimiter } from "../utils/rateLimitHelper";
+import { parseRoles } from "../../../utils/roles";
 
 const authRouter = Router();
 const authService = new AuthService();
@@ -108,7 +109,7 @@ authRouter.get(
       res.json({
         id: user.id,
         email: user.email,
-        roles: user.roles || [],
+        roles: parseRoles(user.role), // Converter role string para array
         name: user.name || user.email.split("@")[0],
         document: user.document ?? null,
         documentType: user.documentType ?? null,

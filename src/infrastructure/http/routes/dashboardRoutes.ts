@@ -7,6 +7,7 @@ import { PrismaPaymentInteractionRepository } from '../../database/repositories/
 import { PrismaProviderCredentialsRepository } from '../../database/repositories/PrismaProviderCredentialsRepository';
 import { logger } from '../../logger';
 import { authMiddleware } from '../middlewares/authMiddleware';
+import { hasRole } from '../../../utils/roles';
 
 export const dashboardRouter = Router();
 const paymentInteractionRepository =
@@ -667,7 +668,7 @@ dashboardRouter.get(
               message: 'merchantId não associado',
             },
           });
-      if (!req.user.roles?.some((r: string) => r.toUpperCase() === 'OWNER'))
+      if (!hasRole(req.user.role, ['OWNER']))
         return res
           .status(403)
           .json({
@@ -726,7 +727,7 @@ dashboardRouter.put(
               message: 'merchantId não associado',
             },
           });
-      if (!req.user.roles?.includes('owner'))
+      if (!hasRole(req.user.role, ['OWNER']))
         return res
           .status(403)
           .json({
@@ -794,7 +795,7 @@ dashboardRouter.get(
               message: 'merchantId não associado',
             },
           });
-      if (!req.user.roles?.includes('owner'))
+      if (!hasRole(req.user.role, ['OWNER']))
         return res
           .status(403)
           .json({

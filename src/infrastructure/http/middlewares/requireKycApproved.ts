@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { KycStatus } from "../../../domain/entities/KycStatus";
+import { hasRole } from "../../../utils/roles";
 
 const ALLOWED_PATHS = ["/me", "/auth", "/kyc", "/support"];
 
@@ -8,7 +9,7 @@ export const requireKycApproved = (req: Request, res: Response, next: NextFuncti
     return next();
   }
 
-  if (req.user?.roles?.includes("ADMIN")) {
+  if (hasRole(req.user?.role, ["ADMIN", "OWNER"])) {
     return next();
   }
 

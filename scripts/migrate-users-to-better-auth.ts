@@ -59,6 +59,7 @@ const migrateUser = async (
     email: string;
     passwordHash: string;
     name: string | null;
+    role: string | null;
     createdAt: Date;
     updatedAt: Date;
   }
@@ -128,6 +129,7 @@ const migrateAllUsers = async (): Promise<MigrationStats> => {
         email: true,
         passwordHash: true,
         name: true,
+        role: true, // Campo role do Better Auth (string com roles separados por vírgula)
         createdAt: true,
         updatedAt: true,
       },

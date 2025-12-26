@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express"
+import { parseRoles } from "../../utils/roles"
 
 const ROLES = ["owner", "admin", "manager", "support", "coproducer", "affiliate", "buyer"] as const
 
@@ -48,7 +49,9 @@ export const requirePermission = (permission: string) => {
       return
     }
 
-    const allowed = (req.user.roles ?? []).some((role: string) => {
+    // req.user.role é uma string com roles separados por vírgula (ex: "OWNER,ADMIN")
+    const userRoles = parseRoles(req.user.role)
+    const allowed = userRoles.some((role: string) => {
       const normalizedRole = role.toLowerCase()
       if (!isRole(normalizedRole)) return false
       return rolePermissions[normalizedRole]?.includes(permission)

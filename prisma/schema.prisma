@@ -46,7 +46,11 @@ enum MerchantType {
 /// ---------------------------------------
 /// User Role Enum (Permissões do Usuário)
 /// ---------------------------------------
-/// Roles definem as permissões e acesso do usuário no sistema:
+/// NOTA: Roles agora são gerenciados pelo Better Auth no campo role (String)
+/// Múltiplos roles são armazenados como string separada por vírgula
+/// Exemplo: "OWNER,ADMIN" ou "BUYER"
+/// 
+/// Roles disponíveis:
 /// - OWNER: Proprietário (acesso total à organização)
 /// - ADMIN: Administrador (gerenciamento completo)
 /// - MANAGER: Gerente (gerenciamento de produtos e afiliados)
@@ -54,16 +58,7 @@ enum MerchantType {
 /// - COPRODUCER: Coprodutor (gerenciamento de produtos e cursos)
 /// - AFFILIATE: Afiliado (visualização de afiliações)
 /// - BUYER: Comprador (acesso à área de membros)
-
-enum UserRole {
-  OWNER // Proprietário (acesso total)
-  ADMIN // Administrador
-  MANAGER // Gerente
-  SUPPORT // Suporte
-  COPRODUCER // Coprodutor
-  AFFILIATE // Afiliado
-  BUYER // Comprador
-}
+/// ---------------------------------------
 
 model Merchant {
   id                       String                    @id @default(uuid())
@@ -110,7 +105,6 @@ model User {
   id                  String               @id @default(uuid())
   email               String               @unique
   passwordHash        String
-  roles               UserRole[]           @default([BUYER]) // Array de roles do usuário
   document            String               @unique // CPF ou CNPJ
   documentType        String? // CPF ou CNPJ normalizado
   kycStatus           String               @default("UNVERIFIED") // UNVERIFIED, PENDING_REVIEW, APPROVED, REJECTED
@@ -141,9 +135,10 @@ model User {
   emailVerified Boolean @default(false)
   image         String?
 
-  // Better Auth Admin Plugin Fields (banimento de usuários)
-  // NOTA: O campo 'role' singular do Better Auth foi removido.
-  // O sistema usa o campo 'roles' (UserRole[]) existente acima.
+  // Better Auth Admin Plugin Fields
+  // NOTA: Múltiplos roles são armazenados como string separada por vírgula (ex: "OWNER,ADMIN")
+  // Valores possíveis: OWNER, ADMIN, MANAGER, SUPPORT, COPRODUCER, AFFILIATE, BUYER
+  role       String?   @default("BUYER") // Roles do usuário (separados por vírgula)
   banned     Boolean?
   banReason  String?
   banExpires DateTime?

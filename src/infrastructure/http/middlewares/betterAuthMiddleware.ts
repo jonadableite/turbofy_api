@@ -20,6 +20,7 @@ declare global {
       user?: User & {
         kycStatus?: string;
         documentType?: string;
+        role?: string; // Campo role do Better Auth (múltiplos roles separados por vírgula)
       };
       session?: Session;
     }
@@ -62,6 +63,7 @@ export const betterAuthMiddleware = async (
       // Campos adicionais para compatibilidade
       kycStatus: (session.user as Record<string, unknown>).kycStatus as string | undefined,
       documentType: (session.user as Record<string, unknown>).documentType as string | undefined,
+      role: (session.user as Record<string, unknown>).role as string | undefined,
     };
     req.session = session as Session;
 
@@ -71,7 +73,7 @@ export const betterAuthMiddleware = async (
       payload: { 
         userId: session.user.id, 
         path: req.path,
-        roles: (session.user as Record<string, unknown>).roles,
+        role: (session.user as Record<string, unknown>).role, // roles como string separada por vírgula
       },
     });
 

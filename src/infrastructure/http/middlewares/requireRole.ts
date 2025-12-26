@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { hasRole } from "../../../utils/roles";
 
 export const requireRoles = (...roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -11,11 +12,8 @@ export const requireRoles = (...roles: string[]) => {
       });
     }
 
-    const expectedRoles = roles.map((role: string) => role.toUpperCase());
-    const hasRole = req.user.roles?.some((role: string) =>
-      expectedRoles.includes(role.toUpperCase())
-    );
-    if (!hasRole) {
+    // req.user.role é uma string com roles separados por vírgula (ex: "OWNER,ADMIN")
+    if (!hasRole(req.user.role, roles)) {
       return res.status(403).json({
         error: {
           code: "FORBIDDEN",

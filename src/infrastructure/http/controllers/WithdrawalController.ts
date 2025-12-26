@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { hasRole } from "../../../utils/roles";
 import { z } from "zod";
 import { PrismaUserLedgerRepository } from "../../database/PrismaUserLedgerRepository";
 import { PrismaUserPixKeyRepository } from "../../database/PrismaUserPixKeyRepository";
@@ -352,7 +353,7 @@ export class WithdrawalController {
   async process(req: Request, res: Response) {
     try {
       const adminId = req.user?.id;
-      if (!adminId || !req.user?.roles?.includes("ADMIN")) {
+      if (!adminId || !hasRole(req.user?.role, ["ADMIN", "OWNER"])) {
         return res.status(403).json({ 
           error: "FORBIDDEN", 
           message: "Only admins can process withdrawals" 

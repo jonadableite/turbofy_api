@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { hasRole } from "../../../utils/roles";
 import { z } from "zod";
 import { SubmitKycDocumentsUseCase } from "../../../application/useCases/kyc/SubmitKycDocumentsUseCase";
 import { ApproveKycUseCase } from "../../../application/useCases/kyc/ApproveKycUseCase";
@@ -63,7 +64,7 @@ export class KycController {
   async approve(req: Request, res: Response) {
     try {
       const adminId = req.user?.id;
-      if (!adminId || !req.user?.roles?.includes("ADMIN")) {
+      if (!adminId || !hasRole(req.user?.role, ["ADMIN", "OWNER"])) {
         return res.status(403).json({ error: "Forbidden" });
       }
       const submissionId = req.params.id;
@@ -78,7 +79,7 @@ export class KycController {
   async reject(req: Request, res: Response) {
     try {
       const adminId = req.user?.id;
-      if (!adminId || !req.user?.roles?.includes("ADMIN")) {
+      if (!adminId || !hasRole(req.user?.role, ["ADMIN", "OWNER"])) {
         return res.status(403).json({ error: "Forbidden" });
       }
       const submissionId = req.params.id;
